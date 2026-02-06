@@ -1,0 +1,47 @@
+use ratatui::{
+    Frame,
+    layout::{Alignment, Rect},
+    widgets::{Block, Borders, Paragraph},
+    text::Line,
+};
+
+use spud_core::{event::Event, module::{HudContribution, Module}};
+
+pub struct HelloModule;
+
+impl HelloModule {
+    pub fn new() -> Self { Self }
+}
+
+impl Module for HelloModule {
+    fn id(&self) -> &'static str { "hello" }
+    fn title(&self) -> &'static str { "Hello" }
+
+    fn handle_event(&mut self, _ev: &Event) {}
+
+    fn hud(&self) -> HudContribution {
+        HudContribution {
+            left_lines: vec![
+                "Tab: next module".into(),
+                "q: quit".into(),
+            ],
+            right_lines: vec![
+                "HMR: (planned)".into(),
+                "IMG: (planned)".into(),
+            ],
+        }
+    }
+}
+
+pub fn render_hero(f: &mut Frame, area: Rect) {
+    let p = Paragraph::new(vec![
+        Line::from("SPUD"),
+        Line::from("Suspiciously Powerful Utility of De-evolution"),
+        Line::from(""),
+        Line::from("Hello World"),
+    ])
+    .alignment(Alignment::Center)
+    .block(Block::default().borders(Borders::ALL).title("HERO"));
+
+    f.render_widget(p, area);
+}

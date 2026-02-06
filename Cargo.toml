@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/spud-app",
+  "crates/spud-core",
+  "crates/spud-ui",
+  "crates/spud-agent",
+  "crates/spud-config",
+  "crates/spud-remote",
+  "crates/spud-mod-hello",
+  "crates/spud-mod-stats",
+]

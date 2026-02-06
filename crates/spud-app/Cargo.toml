@@ -1,0 +1,14 @@
+[package]
+name = "spud-app"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+crossterm = "0.27"
+ratatui = "0.28"
+
+spud-core = { path = "../spud-core" }
+spud-ui = { path = "../spud-ui" }
+spud-mod-hello = { path = "../spud-mod-hello" }
+spud-mod-stats = { path = "../spud-mod-stats" }
