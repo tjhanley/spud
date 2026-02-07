@@ -6,6 +6,8 @@ use ratatui::{
     Frame,
 };
 
+use unicode_width::UnicodeWidthStr;
+
 use spud_core::console::Console;
 use spud_core::logging::LogLevel;
 
@@ -139,6 +141,7 @@ pub fn render_console(
 
     // Position cursor in the input field only when fully open
     if show_cursor {
-        f.set_cursor_position((chunks[2].x + 2 + console.cursor_pos as u16, chunks[2].y));
+        let display_col = console.input_buffer[..console.cursor_pos].width() as u16;
+        f.set_cursor_position((chunks[2].x + 2 + display_col, chunks[2].y));
     }
 }
