@@ -1,6 +1,20 @@
 use std::collections::VecDeque;
+use std::time::{Duration, Instant};
 
 use crate::logging::LogEntry;
+
+/// Animation state for the drop-down console slide.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SlideState {
+    /// Console is fully hidden.
+    Hidden,
+    /// Console is sliding open.
+    Opening { started_at: Instant },
+    /// Console is fully open.
+    Open,
+    /// Console is sliding closed.
+    Closing { started_at: Instant },
+}
 
 /// Drop-down console state.
 ///
@@ -8,8 +22,10 @@ use crate::logging::LogEntry;
 /// with cursor, and scroll position. The console does **not** own rendering —
 /// see [`spud_ui::console::render_console`] for the TUI layer.
 pub struct Console {
-    /// Whether the console overlay is currently visible.
-    pub visible: bool,
+    /// Current slide animation state.
+    pub slide: SlideState,
+    /// Duration of the slide animation.
+    pub slide_duration: Duration,
     log_lines: VecDeque<LogEntry>,
     /// The current text in the input line.
     pub input_buffer: String,
@@ -29,7 +45,8 @@ impl Console {
     /// Create a new console with the given maximum log line capacity.
     pub fn new(max_lines: usize) -> Self {
         Self {
-            visible: false,
+            slide: SlideState::Hidden,
+            slide_duration: Duration::from_millis(250),
             log_lines: VecDeque::with_capacity(max_lines),
             input_buffer: String::new(),
             cursor_pos: 0,
@@ -38,9 +55,79 @@ impl Console {
         }
     }
 
-    /// Toggle the console's visibility.
-    pub fn toggle(&mut self) {
-        self.visible = !self.visible;
+    /// Toggle the console open/closed. Handles mid-animation reversals
+    /// by preserving the current visual position.
+    pub fn toggle(&mut self, now: Instant) {
+        self.slide = match self.slide {
+            SlideState::Hidden => SlideState::Opening { started_at: now },
+            SlideState::Open => SlideState::Closing { started_at: now },
+            SlideState::Opening { started_at } => {
+                // Reverse: compute how far we've opened, start closing from there
+                let elapsed = now.duration_since(started_at);
+                let progress = (elapsed.as_secs_f64() / self.slide_duration.as_secs_f64()).min(1.0);
+                let remaining = self.slide_duration.mul_f64(progress);
+                SlideState::Closing {
+                    started_at: now - remaining,
+                }
+            }
+            SlideState::Closing { started_at } => {
+                // Reverse: compute how far we've closed, start opening from there
+                let elapsed = now.duration_since(started_at);
+                let progress = (elapsed.as_secs_f64() / self.slide_duration.as_secs_f64()).min(1.0);
+                let remaining = self.slide_duration.mul_f64(progress);
+                SlideState::Opening {
+                    started_at: now - remaining,
+                }
+            }
+        };
+    }
+
+    /// Advance animation state. Call each loop iteration before rendering.
+    pub fn update(&mut self, now: Instant) {
+        self.slide = match self.slide {
+            SlideState::Opening { started_at } => {
+                if now.duration_since(started_at) >= self.slide_duration {
+                    SlideState::Open
+                } else {
+                    self.slide
+                }
+            }
+            SlideState::Closing { started_at } => {
+                if now.duration_since(started_at) >= self.slide_duration {
+                    SlideState::Hidden
+                } else {
+                    self.slide
+                }
+            }
+            other => other,
+        };
+    }
+
+    /// Returns 0.0 (hidden) to 1.0 (fully open), linearly interpolated.
+    pub fn overlay_fraction(&self, now: Instant) -> f64 {
+        match self.slide {
+            SlideState::Hidden => 0.0,
+            SlideState::Open => 1.0,
+            SlideState::Opening { started_at } => {
+                let elapsed = now.duration_since(started_at);
+                (elapsed.as_secs_f64() / self.slide_duration.as_secs_f64()).min(1.0)
+            }
+            SlideState::Closing { started_at } => {
+                let elapsed = now.duration_since(started_at);
+                let progress = (elapsed.as_secs_f64() / self.slide_duration.as_secs_f64()).min(1.0);
+                1.0 - progress
+            }
+        }
+    }
+
+    /// Returns true if the console needs rendering (any state except Hidden).
+    pub fn is_visible(&self) -> bool {
+        !matches!(self.slide, SlideState::Hidden)
+    }
+
+    /// Returns true only when fully open (accepts keyboard input).
+    pub fn is_open(&self) -> bool {
+        matches!(self.slide, SlideState::Open)
     }
 
     /// Append a log entry. Drops the oldest entry if the buffer is full.
@@ -145,13 +232,131 @@ mod tests {
     }
 
     #[test]
-    fn toggle_flips_visibility() {
+    fn toggle_from_hidden_starts_opening() {
         let mut c = Console::default();
-        assert!(!c.visible);
-        c.toggle();
-        assert!(c.visible);
-        c.toggle();
-        assert!(!c.visible);
+        let now = Instant::now();
+        assert_eq!(c.slide, SlideState::Hidden);
+        c.toggle(now);
+        assert!(matches!(c.slide, SlideState::Opening { .. }));
+    }
+
+    #[test]
+    fn toggle_from_open_starts_closing() {
+        let mut c = Console::default();
+        let now = Instant::now();
+        c.slide = SlideState::Open;
+        c.toggle(now);
+        assert!(matches!(c.slide, SlideState::Closing { .. }));
+    }
+
+    #[test]
+    fn toggle_mid_opening_reverses_to_closing() {
+        let mut c = Console::default();
+        let start = Instant::now();
+        c.toggle(start); // Hidden -> Opening
+
+        // Advance halfway through the animation
+        let mid = start + c.slide_duration / 2;
+        c.toggle(mid); // Opening -> Closing (preserving position)
+
+        assert!(matches!(c.slide, SlideState::Closing { .. }));
+        // Fraction at the reversal point should be ~0.5
+        let frac = c.overlay_fraction(mid);
+        assert!((frac - 0.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn toggle_mid_closing_reverses_to_opening() {
+        let mut c = Console::default();
+        let start = Instant::now();
+        c.slide = SlideState::Open;
+        c.toggle(start); // Open -> Closing
+
+        let mid = start + c.slide_duration / 2;
+        c.toggle(mid); // Closing -> Opening (preserving position)
+
+        assert!(matches!(c.slide, SlideState::Opening { .. }));
+        let frac = c.overlay_fraction(mid);
+        assert!((frac - 0.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn update_transitions_opening_to_open() {
+        let mut c = Console::default();
+        let start = Instant::now();
+        c.toggle(start);
+
+        let after = start + c.slide_duration;
+        c.update(after);
+        assert_eq!(c.slide, SlideState::Open);
+    }
+
+    #[test]
+    fn update_transitions_closing_to_hidden() {
+        let mut c = Console::default();
+        let start = Instant::now();
+        c.slide = SlideState::Open;
+        c.toggle(start);
+
+        let after = start + c.slide_duration;
+        c.update(after);
+        assert_eq!(c.slide, SlideState::Hidden);
+    }
+
+    #[test]
+    fn overlay_fraction_hidden_is_zero() {
+        let c = Console::default();
+        assert_eq!(c.overlay_fraction(Instant::now()), 0.0);
+    }
+
+    #[test]
+    fn overlay_fraction_open_is_one() {
+        let mut c = Console::default();
+        c.slide = SlideState::Open;
+        assert_eq!(c.overlay_fraction(Instant::now()), 1.0);
+    }
+
+    #[test]
+    fn overlay_fraction_mid_animation() {
+        let mut c = Console::default();
+        let start = Instant::now();
+        c.toggle(start);
+
+        let mid = start + c.slide_duration / 2;
+        let frac = c.overlay_fraction(mid);
+        assert!(frac > 0.4 && frac < 0.6, "expected ~0.5, got {frac}");
+    }
+
+    #[test]
+    fn is_visible_false_only_for_hidden() {
+        let mut c = Console::default();
+        assert!(!c.is_visible());
+
+        let now = Instant::now();
+        c.toggle(now); // Opening
+        assert!(c.is_visible());
+
+        c.slide = SlideState::Open;
+        assert!(c.is_visible());
+
+        c.toggle(now); // Closing
+        assert!(c.is_visible());
+    }
+
+    #[test]
+    fn is_open_only_for_open_state() {
+        let mut c = Console::default();
+        assert!(!c.is_open());
+
+        let now = Instant::now();
+        c.toggle(now); // Opening
+        assert!(!c.is_open());
+
+        c.slide = SlideState::Open;
+        assert!(c.is_open());
+
+        c.toggle(now); // Closing
+        assert!(!c.is_open());
     }
 
     #[test]

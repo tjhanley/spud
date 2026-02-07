@@ -15,8 +15,12 @@ use spud_core::logging::LogLevel;
 /// 1. **Title bar** — shows `CONSOLE` label, current TPS, and close hint.
 /// 2. **Log area** — colour-coded log entries with scroll support.
 /// 3. **Input line** — single-line command input with cursor.
-pub fn render_console(f: &mut Frame, area: Rect, console: &Console, tps: f64) {
-    let overlay_height = area.height / 2;
+pub fn render_console(f: &mut Frame, area: Rect, console: &Console, tps: f64, fraction: f64) {
+    let max_height = area.height / 2;
+    let overlay_height = ((max_height as f64) * fraction).round() as u16;
+    if overlay_height == 0 {
+        return;
+    }
     let overlay = Rect {
         x: area.x,
         y: area.y,
