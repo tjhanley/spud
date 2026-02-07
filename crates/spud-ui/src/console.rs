@@ -18,13 +18,14 @@ use spud_core::logging::LogLevel;
 pub fn render_console(f: &mut Frame, area: Rect, console: &Console, tps: f64, fraction: f64, show_cursor: bool) {
     let max_height = area.height / 2;
     let mut overlay_height = ((max_height as f64) * fraction).round() as u16;
-    // Ensure we have enough height for title, log, and input during animation.
-    if fraction > 0.0 && overlay_height < 3 {
-        overlay_height = 3;
-    }
-    // Need at least 3 rows for title + log + input; skip if too small.
+    // Need at least 3 rows for title + log + input; clamp during animation,
+    // skip entirely when fully hidden.
     if overlay_height < 3 {
-        return;
+        if fraction > 0.0 {
+            overlay_height = 3;
+        } else {
+            return;
+        }
     }
     let overlay = Rect {
         x: area.x,
