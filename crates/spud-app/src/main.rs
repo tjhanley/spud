@@ -5,11 +5,11 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use crossterm::{
+    event::{self, Event as CEvent, KeyCode},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-    event::{self, Event as CEvent, KeyCode},
 };
-use ratatui::{Frame, Terminal, backend::CrosstermBackend, layout::Rect};
+use ratatui::{backend::CrosstermBackend, layout::Rect, Frame, Terminal};
 
 use spud_core::{
     bus::EventBus,
@@ -19,8 +19,8 @@ use spud_core::{
     fps::TickCounter,
     logging::{self, LogBuffer, LogEntry, LogLevel},
     module::Module,
-    state::AppState,
     registry::ModuleRegistry,
+    state::AppState,
 };
 use spud_ui::{
     console::render_console,
@@ -58,19 +58,21 @@ fn register_module<M: Module + HeroRenderer + 'static>(
     module: M,
 ) -> Result<()> {
     let id = module.id().to_string();
-    render_map.insert(id, Box::new(|any, f, area| {
-        if let Some(m) = any.downcast_ref::<M>() {
-            m.render_hero(f, area);
-        }
-    }));
+    render_map.insert(
+        id,
+        Box::new(|any, f, area| {
+            if let Some(m) = any.downcast_ref::<M>() {
+                m.render_hero(f, area);
+            }
+        }),
+    );
     registry.register(Box::new(module))
 }
 
 impl App {
     fn new(log_buffer: LogBuffer) -> Result<Self> {
         let mut registry = ModuleRegistry::new();
-        let mut render_map: HashMap<String, RenderFn> =
-            HashMap::new();
+        let mut render_map: HashMap<String, RenderFn> = HashMap::new();
         register_module(&mut registry, &mut render_map, HelloModule::new())?;
         register_module(&mut registry, &mut render_map, StatsModule::new())?;
         Ok(Self {
@@ -111,14 +113,24 @@ impl App {
 
         // Special-case "help" with no args to list all commands from the registry
         if trimmed == "help" || trimmed == "?" {
-            let lines: Vec<String> = self.commands.commands().iter().map(|cmd| {
-                let aliases = cmd.aliases();
-                if aliases.is_empty() {
-                    format!("  {:12} {}", cmd.usage(), cmd.description())
-                } else {
-                    format!("  {:12} {} (aliases: {})", cmd.usage(), cmd.description(), aliases.join(", "))
-                }
-            }).collect();
+            let lines: Vec<String> = self
+                .commands
+                .commands()
+                .iter()
+                .map(|cmd| {
+                    let aliases = cmd.aliases();
+                    if aliases.is_empty() {
+                        format!("  {:12} {}", cmd.usage(), cmd.description())
+                    } else {
+                        format!(
+                            "  {:12} {} (aliases: {})",
+                            cmd.usage(),
+                            cmd.description(),
+                            aliases.join(", ")
+                        )
+                    }
+                })
+                .collect();
             for line in lines {
                 self.console.push_log(LogEntry {
                     level: LogLevel::Info,
@@ -218,7 +230,14 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
             if app.console.is_visible() {
                 let fraction = app.console.overlay_fraction(now);
                 let show_cursor = app.console.is_open();
-                render_console(f, f.area(), &app.console, app.tick_counter.tps(), fraction, show_cursor);
+                render_console(
+                    f,
+                    f.area(),
+                    &app.console,
+                    app.tick_counter.tps(),
+                    fraction,
+                    show_cursor,
+                );
             }
         })?;
 

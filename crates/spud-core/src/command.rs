@@ -39,11 +39,15 @@ pub trait Command: Send + Sync {
     /// The primary name used to invoke this command (e.g. `"help"`).
     fn name(&self) -> &str;
     /// Alternative names that also invoke this command (e.g. `["?"]`).
-    fn aliases(&self) -> &[&str] { &[] }
+    fn aliases(&self) -> &[&str] {
+        &[]
+    }
     /// A one-line description shown in the help listing.
     fn description(&self) -> &str;
     /// Usage string shown in help detail (e.g. `"switch <module_id>"`).
-    fn usage(&self) -> &str { self.name() }
+    fn usage(&self) -> &str {
+        self.name()
+    }
     /// Execute the command with the given arguments and context.
     fn execute(&self, args: &[&str], ctx: &mut CommandContext) -> CommandOutput;
 }
@@ -93,9 +97,10 @@ impl CommandRegistry {
 
         match self.lookup.get(name) {
             Some(&idx) => self.commands[idx].execute(args, ctx),
-            None => CommandOutput::Lines(vec![
-                format!("unknown command: '{}'. Type 'help' for available commands.", name),
-            ]),
+            None => CommandOutput::Lines(vec![format!(
+                "unknown command: '{}'. Type 'help' for available commands.",
+                name
+            )]),
         }
     }
 
@@ -111,16 +116,25 @@ impl CommandRegistry {
 pub struct HelpCommand;
 
 impl Command for HelpCommand {
-    fn name(&self) -> &str { "help" }
-    fn aliases(&self) -> &[&str] { &["?"] }
-    fn description(&self) -> &str { "List commands or show specific help" }
-    fn usage(&self) -> &str { "help [command]" }
+    fn name(&self) -> &str {
+        "help"
+    }
+    fn aliases(&self) -> &[&str] {
+        &["?"]
+    }
+    fn description(&self) -> &str {
+        "List commands or show specific help"
+    }
+    fn usage(&self) -> &str {
+        "help [command]"
+    }
 
     fn execute(&self, args: &[&str], _ctx: &mut CommandContext) -> CommandOutput {
         if !args.is_empty() {
-            return CommandOutput::Lines(vec![
-                format!("help for '{}' — use 'help' to list all commands", args[0]),
-            ]);
+            return CommandOutput::Lines(vec![format!(
+                "help for '{}' — use 'help' to list all commands",
+                args[0]
+            )]);
         }
         CommandOutput::Lines(vec!["Type 'help' to list all commands.".into()])
     }
@@ -130,9 +144,15 @@ impl Command for HelpCommand {
 pub struct ClearCommand;
 
 impl Command for ClearCommand {
-    fn name(&self) -> &str { "clear" }
-    fn aliases(&self) -> &[&str] { &["cls"] }
-    fn description(&self) -> &str { "Clear console log" }
+    fn name(&self) -> &str {
+        "clear"
+    }
+    fn aliases(&self) -> &[&str] {
+        &["cls"]
+    }
+    fn description(&self) -> &str {
+        "Clear console log"
+    }
 
     fn execute(&self, _args: &[&str], ctx: &mut CommandContext) -> CommandOutput {
         ctx.console.clear_logs();
@@ -144,16 +164,31 @@ impl Command for ClearCommand {
 pub struct ModulesCommand;
 
 impl Command for ModulesCommand {
-    fn name(&self) -> &str { "modules" }
-    fn aliases(&self) -> &[&str] { &["mods"] }
-    fn description(&self) -> &str { "List registered modules" }
+    fn name(&self) -> &str {
+        "modules"
+    }
+    fn aliases(&self) -> &[&str] {
+        &["mods"]
+    }
+    fn description(&self) -> &str {
+        "List registered modules"
+    }
 
     fn execute(&self, _args: &[&str], ctx: &mut CommandContext) -> CommandOutput {
         let active_id = ctx.registry.active_id().map(|s| s.to_string());
-        let lines: Vec<String> = ctx.registry.list().iter().map(|(id, title)| {
-            let marker = if Some(id.to_string()) == active_id { " *" } else { "" };
-            format!("  {} — {}{}", id, title, marker)
-        }).collect();
+        let lines: Vec<String> = ctx
+            .registry
+            .list()
+            .iter()
+            .map(|(id, title)| {
+                let marker = if Some(id.to_string()) == active_id {
+                    " *"
+                } else {
+                    ""
+                };
+                format!("  {} — {}{}", id, title, marker)
+            })
+            .collect();
         CommandOutput::Lines(lines)
     }
 }
@@ -162,10 +197,18 @@ impl Command for ModulesCommand {
 pub struct SwitchCommand;
 
 impl Command for SwitchCommand {
-    fn name(&self) -> &str { "switch" }
-    fn aliases(&self) -> &[&str] { &["sw"] }
-    fn description(&self) -> &str { "Switch active module" }
-    fn usage(&self) -> &str { "switch <module_id>" }
+    fn name(&self) -> &str {
+        "switch"
+    }
+    fn aliases(&self) -> &[&str] {
+        &["sw"]
+    }
+    fn description(&self) -> &str {
+        "Switch active module"
+    }
+    fn usage(&self) -> &str {
+        "switch <module_id>"
+    }
 
     fn execute(&self, args: &[&str], ctx: &mut CommandContext) -> CommandOutput {
         if args.is_empty() {
@@ -188,9 +231,15 @@ impl Command for SwitchCommand {
 pub struct QuitCommand;
 
 impl Command for QuitCommand {
-    fn name(&self) -> &str { "quit" }
-    fn aliases(&self) -> &[&str] { &["exit", "q"] }
-    fn description(&self) -> &str { "Exit SPUD" }
+    fn name(&self) -> &str {
+        "quit"
+    }
+    fn aliases(&self) -> &[&str] {
+        &["exit", "q"]
+    }
+    fn description(&self) -> &str {
+        "Exit SPUD"
+    }
 
     fn execute(&self, _args: &[&str], _ctx: &mut CommandContext) -> CommandOutput {
         CommandOutput::Quit
@@ -201,9 +250,15 @@ impl Command for QuitCommand {
 pub struct UptimeCommand;
 
 impl Command for UptimeCommand {
-    fn name(&self) -> &str { "uptime" }
-    fn aliases(&self) -> &[&str] { &[] }
-    fn description(&self) -> &str { "Show runtime uptime" }
+    fn name(&self) -> &str {
+        "uptime"
+    }
+    fn aliases(&self) -> &[&str] {
+        &[]
+    }
+    fn description(&self) -> &str {
+        "Show runtime uptime"
+    }
 
     fn execute(&self, _args: &[&str], ctx: &mut CommandContext) -> CommandOutput {
         let elapsed = ctx.started_at.elapsed();
@@ -219,9 +274,15 @@ impl Command for UptimeCommand {
 pub struct TpsCommand;
 
 impl Command for TpsCommand {
-    fn name(&self) -> &str { "tps" }
-    fn aliases(&self) -> &[&str] { &["fps"] }
-    fn description(&self) -> &str { "Show ticks-per-second" }
+    fn name(&self) -> &str {
+        "tps"
+    }
+    fn aliases(&self) -> &[&str] {
+        &["fps"]
+    }
+    fn description(&self) -> &str {
+        "Show ticks-per-second"
+    }
 
     fn execute(&self, _args: &[&str], ctx: &mut CommandContext) -> CommandOutput {
         CommandOutput::Lines(vec![format!("TPS: {:.1}", ctx.tick_counter.tps())])
@@ -232,10 +293,18 @@ impl Command for TpsCommand {
 pub struct EchoCommand;
 
 impl Command for EchoCommand {
-    fn name(&self) -> &str { "echo" }
-    fn aliases(&self) -> &[&str] { &[] }
-    fn description(&self) -> &str { "Print message to console" }
-    fn usage(&self) -> &str { "echo <message>" }
+    fn name(&self) -> &str {
+        "echo"
+    }
+    fn aliases(&self) -> &[&str] {
+        &[]
+    }
+    fn description(&self) -> &str {
+        "Print message to console"
+    }
+    fn usage(&self) -> &str {
+        "echo <message>"
+    }
 
     fn execute(&self, args: &[&str], _ctx: &mut CommandContext) -> CommandOutput {
         CommandOutput::Lines(vec![args.join(" ")])
@@ -274,19 +343,41 @@ mod tests {
         title: &'static str,
     }
     impl Module for FakeModule {
-        fn id(&self) -> &'static str { self.id }
-        fn title(&self) -> &'static str { self.title }
-        fn as_any(&self) -> &dyn std::any::Any { self }
+        fn id(&self) -> &'static str {
+            self.id
+        }
+        fn title(&self) -> &'static str {
+            self.title
+        }
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
     }
 
     fn make_ctx() -> (ModuleRegistry, Console, EventBus, TickCounter, Instant) {
         let mut reg = ModuleRegistry::new();
-        reg.register(Box::new(FakeModule { id: "hello", title: "Hello" })).unwrap();
-        reg.register(Box::new(FakeModule { id: "stats", title: "Stats" })).unwrap();
-        (reg, Console::default(), EventBus::new(), TickCounter::default(), Instant::now())
+        reg.register(Box::new(FakeModule {
+            id: "hello",
+            title: "Hello",
+        }))
+        .unwrap();
+        reg.register(Box::new(FakeModule {
+            id: "stats",
+            title: "Stats",
+        }))
+        .unwrap();
+        (
+            reg,
+            Console::default(),
+            EventBus::new(),
+            TickCounter::default(),
+            Instant::now(),
+        )
     }
 
-    fn ctx_from(parts: &mut (ModuleRegistry, Console, EventBus, TickCounter, Instant)) -> CommandContext<'_> {
+    fn ctx_from(
+        parts: &mut (ModuleRegistry, Console, EventBus, TickCounter, Instant),
+    ) -> CommandContext<'_> {
         CommandContext {
             registry: &mut parts.0,
             console: &mut parts.1,

@@ -41,7 +41,11 @@ impl TickCounter {
         }
         let now = self.timestamps.back().copied().unwrap();
         let window_start = now - self.window;
-        let count = self.timestamps.iter().filter(|&&t| t >= window_start).count();
+        let count = self
+            .timestamps
+            .iter()
+            .filter(|&&t| t >= window_start)
+            .count();
         count as f64 / self.window.as_secs_f64()
     }
 
@@ -99,6 +103,10 @@ mod tests {
             counter.tick(base + Duration::from_millis(1000 + i * 300));
         }
 
-        assert!(counter.timestamps.len() <= 5, "timestamps: {}", counter.timestamps.len());
+        assert!(
+            counter.timestamps.len() <= 5,
+            "timestamps: {}",
+            counter.timestamps.len()
+        );
     }
 }

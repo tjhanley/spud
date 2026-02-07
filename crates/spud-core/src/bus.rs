@@ -50,7 +50,9 @@ mod tests {
     #[test]
     fn publish_enqueues_events() {
         let mut bus = EventBus::new();
-        bus.publish(Event::Tick { now: Instant::now() });
+        bus.publish(Event::Tick {
+            now: Instant::now(),
+        });
         bus.publish(Event::Quit);
         assert!(bus.has_pending());
     }
@@ -58,7 +60,9 @@ mod tests {
     #[test]
     fn drain_returns_all_and_empties() {
         let mut bus = EventBus::new();
-        bus.publish(Event::Tick { now: Instant::now() });
+        bus.publish(Event::Tick {
+            now: Instant::now(),
+        });
         bus.publish(Event::Quit);
         let events = bus.drain();
         assert_eq!(events.len(), 2);

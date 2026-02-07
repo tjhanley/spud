@@ -10,3 +10,7 @@ members = [
   "crates/spud-mod-hello",
   "crates/spud-mod-stats",
 ]
+
+[workspace.dependencies]
+crossterm = "0.29"
+ratatui = "0.30"

@@ -5,8 +5,8 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1"
-crossterm = "0.27"
-ratatui = "0.28"
+crossterm = { workspace = true }
+ratatui = { workspace = true }
 tracing = "0.1"
 
 spud-core = { path = "../spud-core" }

@@ -1,13 +1,16 @@
 use std::any::Any;
 
 use ratatui::{
-    Frame,
     layout::{Alignment, Rect},
-    widgets::{Block, Borders, Paragraph},
     text::Line,
+    widgets::{Block, Borders, Paragraph},
+    Frame,
 };
 
-use spud_core::{event::Event, module::{HudContribution, Module}};
+use spud_core::{
+    event::Event,
+    module::{HudContribution, Module},
+};
 use spud_ui::renderer::HeroRenderer;
 
 /// A minimal welcome-screen module.
@@ -18,34 +21,38 @@ use spud_ui::renderer::HeroRenderer;
 pub struct HelloModule;
 
 impl Default for HelloModule {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl HelloModule {
     /// Create a new `HelloModule`.
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl Module for HelloModule {
-    fn id(&self) -> &'static str { "hello" }
-    fn title(&self) -> &'static str { "Hello" }
+    fn id(&self) -> &'static str {
+        "hello"
+    }
+    fn title(&self) -> &'static str {
+        "Hello"
+    }
 
     fn handle_event(&mut self, _ev: &Event) {}
 
     fn hud(&self) -> HudContribution {
         HudContribution {
-            left_lines: vec![
-                "Tab: next module".into(),
-                "q: quit".into(),
-            ],
-            right_lines: vec![
-                "HMR: (planned)".into(),
-                "IMG: (planned)".into(),
-            ],
+            left_lines: vec!["Tab: next module".into(), "q: quit".into()],
+            right_lines: vec!["HMR: (planned)".into(), "IMG: (planned)".into()],
         }
     }
 
-    fn as_any(&self) -> &dyn Any { self }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 impl HeroRenderer for HelloModule {

@@ -30,7 +30,11 @@ pub enum Event {
     /// A module has been moved to the background.
     ModuleDeactivated { id: String },
     /// A telemetry data point emitted by a module or subsystem.
-    Telemetry { source: String, key: String, value: TelemetryValue },
+    Telemetry {
+        source: String,
+        key: String,
+        value: TelemetryValue,
+    },
     /// An application-defined event for extension points.
     Custom { tag: String, payload: String },
 }

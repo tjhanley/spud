@@ -86,7 +86,8 @@ Use `checked_duration_since` for all `Instant` arithmetic to avoid panics.
 - Commands handle their own error display via `CommandOutput`
 
 ### Dependencies
-- Pin to major version: `anyhow = "1"`, `ratatui = "0.28"`, `crossterm = "0.27"`
+- Pin to major version: `anyhow = "1"`, `ratatui = "0.30"`, `crossterm = "0.29"`
+- Shared deps (`ratatui`, `crossterm`) are centralized in `[workspace.dependencies]`; crates reference them via `{ workspace = true }`
 - Internal workspace crates use path dependencies: `{ path = "../crate-name" }`
 - Logging via `tracing` crate (`tracing::info!`, `tracing::warn!`, etc.)
 
