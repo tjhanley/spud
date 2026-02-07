@@ -17,7 +17,11 @@ use spud_core::logging::LogLevel;
 /// 3. **Input line** — single-line command input with cursor.
 pub fn render_console(f: &mut Frame, area: Rect, console: &Console, tps: f64, fraction: f64) {
     let max_height = area.height / 2;
-    let overlay_height = ((max_height as f64) * fraction).round() as u16;
+    let mut overlay_height = ((max_height as f64) * fraction).round() as u16;
+    // Ensure we have enough height for title, log, and input during animation.
+    if fraction > 0.0 && overlay_height < 3 {
+        overlay_height = 3;
+    }
     // Need at least 3 rows for title + log + input; skip if too small.
     if overlay_height < 3 {
         return;
