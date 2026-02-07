@@ -80,9 +80,9 @@ pub fn render_console(
 
     // Scroll from top: show bottom by default, scroll_offset moves viewport up.
     // Entry count approximates row count — exact when lines don't wrap,
-    // harmlessly over-scrolls (blank space) when they do.
+    // under-scrolls when they do (viewport may not reach the true bottom).
     let scroll_y = total
-        .saturating_sub(visible_height + scroll_offset)
+        .saturating_sub(visible_height.saturating_add(scroll_offset))
         .min(u16::MAX as usize) as u16;
 
     let lines: Vec<Line> = log_lines
