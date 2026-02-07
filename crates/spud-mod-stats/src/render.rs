@@ -6,7 +6,7 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span},
-    widgets::{Block, Borders, LineGauge, Paragraph, Wrap},
+    widgets::{Block, Borders, LineGauge, Paragraph},
     Frame,
 };
 
@@ -179,22 +179,25 @@ fn render_cores(
         return;
     }
 
-    let mut spans = Vec::new();
+    let mut lines: Vec<Line> = Vec::new();
+    let mut row_spans: Vec<Span> = Vec::new();
     for (i, &pct) in snap.cpu_per_core.iter().enumerate() {
         let color = threshold_color(pct, 70.0, 90.0, Color::Green);
-        spans.push(Span::styled(
+        row_spans.push(Span::styled(
             format!("{i:>2}: {:>3.0}%", pct),
             Style::default().fg(color),
         ));
-        // Separator between columns (but not at end of row).
         if (i + 1) % cores_per_row != 0 {
-            spans.push(Span::raw("   "));
-        } else if i + 1 < snap.cpu_per_core.len() {
-            spans.push(Span::raw("\n"));
+            row_spans.push(Span::raw("   "));
+        } else {
+            lines.push(Line::from(std::mem::take(&mut row_spans)));
         }
     }
+    if !row_spans.is_empty() {
+        lines.push(Line::from(row_spans));
+    }
 
-    let text = Paragraph::new(Line::from(spans)).wrap(Wrap { trim: false });
+    let text = Paragraph::new(lines);
     f.render_widget(text, grid_area);
 }
 

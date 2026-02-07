@@ -113,9 +113,15 @@ impl TelemetryCollector {
         self.snapshot.swap_total = self.sys.total_swap();
         self.snapshot.swap_used = self.sys.used_swap();
 
-        if let Some(proc) = self.sys.process(self.self_pid) {
-            self.snapshot.self_rss = Some(proc.memory());
-            self.snapshot.self_cpu = Some(proc.cpu_usage());
+        match self.sys.process(self.self_pid) {
+            Some(proc) => {
+                self.snapshot.self_rss = Some(proc.memory());
+                self.snapshot.self_cpu = Some(proc.cpu_usage());
+            }
+            None => {
+                self.snapshot.self_rss = None;
+                self.snapshot.self_cpu = None;
+            }
         }
 
         true
@@ -156,9 +162,9 @@ mod tests {
         let mut c = TelemetryCollector::with_interval(Duration::from_millis(10));
         let t0 = Instant::now();
         assert!(c.maybe_refresh(t0));
-        // Wait for the interval to elapse.
-        std::thread::sleep(Duration::from_millis(15));
-        assert!(c.maybe_refresh(Instant::now()));
+        // Simulate time passing beyond the interval without sleeping.
+        let t1 = t0 + Duration::from_millis(11);
+        assert!(c.maybe_refresh(t1));
     }
 
     #[test]

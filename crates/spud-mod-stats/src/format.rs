@@ -1,7 +1,6 @@
 //! Human-readable formatting utilities for system metrics.
 //!
-//! All functions are pure and allocation-free where possible, making them
-//! easy to test in isolation.
+//! All functions are pure and easy to test in isolation.
 
 const KIB: u64 = 1024;
 const MIB: u64 = 1024 * KIB;
