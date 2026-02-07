@@ -18,7 +18,8 @@ use spud_core::logging::LogLevel;
 pub fn render_console(f: &mut Frame, area: Rect, console: &Console, tps: f64, fraction: f64) {
     let max_height = area.height / 2;
     let overlay_height = ((max_height as f64) * fraction).round() as u16;
-    if overlay_height == 0 {
+    // Need at least 3 rows for title + log + input; skip if too small.
+    if overlay_height < 3 {
         return;
     }
     let overlay = Rect {

@@ -24,8 +24,8 @@ pub enum SlideState {
 pub struct Console {
     /// Current slide animation state.
     pub slide: SlideState,
-    /// Duration of the slide animation.
-    pub slide_duration: Duration,
+    /// Duration of the slide animation (must be > 0).
+    slide_duration: Duration,
     log_lines: VecDeque<LogEntry>,
     /// The current text in the input line.
     pub input_buffer: String,
@@ -62,21 +62,27 @@ impl Console {
             SlideState::Hidden => SlideState::Opening { started_at: now },
             SlideState::Open => SlideState::Closing { started_at: now },
             SlideState::Opening { started_at } => {
-                // Reverse: compute how far we've opened, start closing from there
+                // Reverse: compute current open fraction, then backdate the
+                // Closing started_at so its fraction equals the same position.
+                // Closing fraction = 1.0 - close_progress, so we need
+                // close_progress = 1.0 - open_fraction.
                 let elapsed = now.duration_since(started_at);
-                let progress = (elapsed.as_secs_f64() / self.slide_duration.as_secs_f64()).min(1.0);
-                let remaining = self.slide_duration.mul_f64(progress);
+                let open_fraction = (elapsed.as_secs_f64() / self.slide_duration.as_secs_f64()).min(1.0);
+                let elapsed_closing = self.slide_duration.mul_f64(1.0 - open_fraction);
                 SlideState::Closing {
-                    started_at: now - remaining,
+                    started_at: now - elapsed_closing,
                 }
             }
             SlideState::Closing { started_at } => {
-                // Reverse: compute how far we've closed, start opening from there
+                // Reverse: compute current visible fraction, then backdate the
+                // Opening started_at so its fraction equals the same position.
+                // Opening fraction = open_progress, and current fraction =
+                // 1.0 - close_progress, so open_progress = 1.0 - close_progress.
                 let elapsed = now.duration_since(started_at);
-                let progress = (elapsed.as_secs_f64() / self.slide_duration.as_secs_f64()).min(1.0);
-                let remaining = self.slide_duration.mul_f64(progress);
+                let close_progress = (elapsed.as_secs_f64() / self.slide_duration.as_secs_f64()).min(1.0);
+                let elapsed_opening = self.slide_duration.mul_f64(1.0 - close_progress);
                 SlideState::Opening {
-                    started_at: now - remaining,
+                    started_at: now - elapsed_opening,
                 }
             }
         };
@@ -128,6 +134,11 @@ impl Console {
     /// Returns true only when fully open (accepts keyboard input).
     pub fn is_open(&self) -> bool {
         matches!(self.slide, SlideState::Open)
+    }
+
+    /// Returns the slide animation duration.
+    pub fn slide_duration(&self) -> Duration {
+        self.slide_duration
     }
 
     /// Append a log entry. Drops the oldest entry if the buffer is full.
@@ -256,7 +267,7 @@ mod tests {
         c.toggle(start); // Hidden -> Opening
 
         // Advance halfway through the animation
-        let mid = start + c.slide_duration / 2;
+        let mid = start + c.slide_duration() / 2;
         c.toggle(mid); // Opening -> Closing (preserving position)
 
         assert!(matches!(c.slide, SlideState::Closing { .. }));
@@ -272,7 +283,7 @@ mod tests {
         c.slide = SlideState::Open;
         c.toggle(start); // Open -> Closing
 
-        let mid = start + c.slide_duration / 2;
+        let mid = start + c.slide_duration() / 2;
         c.toggle(mid); // Closing -> Opening (preserving position)
 
         assert!(matches!(c.slide, SlideState::Opening { .. }));
@@ -281,12 +292,49 @@ mod tests {
     }
 
     #[test]
+    fn toggle_mid_opening_reverses_at_quarter() {
+        let mut c = Console::default();
+        let start = Instant::now();
+        c.toggle(start); // Hidden -> Opening
+
+        // Advance 25% through the animation
+        let quarter = start + c.slide_duration() / 4;
+        let frac_before = c.overlay_fraction(quarter);
+        assert!((frac_before - 0.25).abs() < 0.01, "expected ~0.25, got {frac_before}");
+
+        c.toggle(quarter); // Opening -> Closing (preserving position)
+        assert!(matches!(c.slide, SlideState::Closing { .. }));
+
+        let frac_after = c.overlay_fraction(quarter);
+        assert!((frac_after - 0.25).abs() < 0.01, "expected ~0.25 after reversal, got {frac_after}");
+    }
+
+    #[test]
+    fn toggle_mid_closing_reverses_at_quarter() {
+        let mut c = Console::default();
+        let start = Instant::now();
+        c.slide = SlideState::Open;
+        c.toggle(start); // Open -> Closing
+
+        // Advance 25% through closing (fraction should be 0.75)
+        let quarter = start + c.slide_duration() / 4;
+        let frac_before = c.overlay_fraction(quarter);
+        assert!((frac_before - 0.75).abs() < 0.01, "expected ~0.75, got {frac_before}");
+
+        c.toggle(quarter); // Closing -> Opening (preserving position)
+        assert!(matches!(c.slide, SlideState::Opening { .. }));
+
+        let frac_after = c.overlay_fraction(quarter);
+        assert!((frac_after - 0.75).abs() < 0.01, "expected ~0.75 after reversal, got {frac_after}");
+    }
+
+    #[test]
     fn update_transitions_opening_to_open() {
         let mut c = Console::default();
         let start = Instant::now();
         c.toggle(start);
 
-        let after = start + c.slide_duration;
+        let after = start + c.slide_duration();
         c.update(after);
         assert_eq!(c.slide, SlideState::Open);
     }
@@ -298,7 +346,7 @@ mod tests {
         c.slide = SlideState::Open;
         c.toggle(start);
 
-        let after = start + c.slide_duration;
+        let after = start + c.slide_duration();
         c.update(after);
         assert_eq!(c.slide, SlideState::Hidden);
     }
@@ -322,7 +370,7 @@ mod tests {
         let start = Instant::now();
         c.toggle(start);
 
-        let mid = start + c.slide_duration / 2;
+        let mid = start + c.slide_duration() / 2;
         let frac = c.overlay_fraction(mid);
         assert!(frac > 0.4 && frac < 0.6, "expected ~0.5, got {frac}");
     }
