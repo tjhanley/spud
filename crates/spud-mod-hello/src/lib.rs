@@ -9,6 +9,10 @@ use spud_core::{event::Event, module::{HudContribution, Module}};
 
 pub struct HelloModule;
 
+impl Default for HelloModule {
+    fn default() -> Self { Self }
+}
+
 impl HelloModule {
     pub fn new() -> Self { Self }
 }
@@ -31,17 +35,17 @@ impl Module for HelloModule {
             ],
         }
     }
-}
 
-pub fn render_hero(f: &mut Frame, area: Rect) {
-    let p = Paragraph::new(vec![
-        Line::from("SPUD"),
-        Line::from("Suspiciously Powerful Utility of De-evolution"),
-        Line::from(""),
-        Line::from("Hello World"),
-    ])
-    .alignment(Alignment::Center)
-    .block(Block::default().borders(Borders::ALL).title("HERO"));
+    fn render_hero(&self, f: &mut Frame, area: Rect) {
+        let p = Paragraph::new(vec![
+            Line::from("SPUD"),
+            Line::from("Suspiciously Powerful Utility of De-evolution"),
+            Line::from(""),
+            Line::from("Hello World"),
+        ])
+        .alignment(Alignment::Center)
+        .block(Block::default().borders(Borders::ALL).title("HERO"));
 
-    f.render_widget(p, area);
+        f.render_widget(p, area);
+    }
 }

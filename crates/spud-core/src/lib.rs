@@ -1,3 +1,9 @@
+pub mod bus;
+pub mod command;
+pub mod console;
 pub mod event;
+pub mod fps;
+pub mod logging;
 pub mod module;
+pub mod registry;
 pub mod state;

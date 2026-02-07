@@ -1,3 +1,5 @@
+use ratatui::{Frame, layout::Rect};
+
 use crate::event::Event;
 
 #[derive(Default)]
@@ -15,4 +17,6 @@ pub trait Module {
     fn hud(&self) -> HudContribution {
         HudContribution::default()
     }
+
+    fn render_hero(&self, _f: &mut Frame, _area: Rect) {}
 }
