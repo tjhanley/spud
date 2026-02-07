@@ -78,17 +78,15 @@ pub fn render_console(
     let total = log_lines.len();
     let scroll_offset = console.scroll_offset();
 
-    let start = if total > visible_height + scroll_offset {
-        total - visible_height - scroll_offset
-    } else {
-        0
-    };
-    let end = total.saturating_sub(scroll_offset);
+    // Scroll from top: show bottom by default, scroll_offset moves viewport up.
+    // Entry count approximates row count — exact when lines don't wrap,
+    // under-scrolls when they do (viewport may not reach the true bottom).
+    let scroll_y = total
+        .saturating_sub(visible_height.saturating_add(scroll_offset))
+        .min(u16::MAX as usize) as u16;
 
     let lines: Vec<Line> = log_lines
         .iter()
-        .skip(start)
-        .take(end.saturating_sub(start))
         .map(|entry| {
             let level_color = match entry.level {
                 LogLevel::Error => Color::Red,
@@ -120,7 +118,8 @@ pub fn render_console(
     f.render_widget(
         Paragraph::new(lines)
             .block(log_block)
-            .wrap(Wrap { trim: false }),
+            .wrap(Wrap { trim: false })
+            .scroll((scroll_y, 0)),
         chunks[1],
     );
 
