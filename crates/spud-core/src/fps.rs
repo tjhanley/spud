@@ -1,7 +1,11 @@
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
-/// Counts ticks-per-second over a sliding window.
+/// Measures ticks-per-second over a sliding time window.
+///
+/// Call [`tick`](TickCounter::tick) once per frame/tick, then
+/// [`tps`](TickCounter::tps) to read the current rate. Old timestamps outside
+/// the window are automatically pruned.
 pub struct TickCounter {
     timestamps: VecDeque<Instant>,
     window: Duration,
@@ -14,6 +18,7 @@ impl Default for TickCounter {
 }
 
 impl TickCounter {
+    /// Create a counter with the given measurement window.
     pub fn new(window: Duration) -> Self {
         Self {
             timestamps: VecDeque::new(),
@@ -21,11 +26,15 @@ impl TickCounter {
         }
     }
 
+    /// Record a tick at the given instant and prune expired timestamps.
     pub fn tick(&mut self, now: Instant) {
         self.timestamps.push_back(now);
         self.prune(now);
     }
 
+    /// Return the current ticks-per-second based on timestamps in the window.
+    ///
+    /// Returns `0.0` if fewer than two ticks have been recorded.
     pub fn tps(&self) -> f64 {
         if self.timestamps.len() < 2 {
             return 0.0;
@@ -36,6 +45,7 @@ impl TickCounter {
         count as f64 / self.window.as_secs_f64()
     }
 
+    /// Remove timestamps older than `now - window`.
     fn prune(&mut self, now: Instant) {
         let cutoff = now - self.window;
         while let Some(&front) = self.timestamps.front() {
@@ -81,17 +91,14 @@ mod tests {
         let mut counter = TickCounter::new(Duration::from_secs(1));
         let base = Instant::now();
 
-        // Add 5 ticks in the first second
         for i in 0..5 {
             counter.tick(base + Duration::from_millis(i * 200));
         }
 
-        // Add 3 ticks in the second second (should prune old ones)
         for i in 0..3 {
             counter.tick(base + Duration::from_millis(1000 + i * 300));
         }
 
-        // Only recent timestamps should remain
         assert!(counter.timestamps.len() <= 5, "timestamps: {}", counter.timestamps.len());
     }
 }

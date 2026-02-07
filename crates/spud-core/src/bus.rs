@@ -2,6 +2,12 @@ use std::collections::VecDeque;
 
 use crate::event::Event;
 
+/// A simple FIFO event queue.
+///
+/// The app loop uses the bus in a three-phase cycle:
+/// 1. **Publish** — input polling and timers push events into the queue.
+/// 2. **Drain** — all pending events are pulled out in order.
+/// 3. **Broadcast** — each event is dispatched to modules via the registry.
 pub struct EventBus {
     queue: VecDeque<Event>,
 }
@@ -13,20 +19,24 @@ impl Default for EventBus {
 }
 
 impl EventBus {
+    /// Create an empty event bus.
     pub fn new() -> Self {
         Self {
             queue: VecDeque::new(),
         }
     }
 
+    /// Enqueue an event at the back of the queue.
     pub fn publish(&mut self, event: Event) {
         self.queue.push_back(event);
     }
 
+    /// Remove and return all pending events, preserving insertion order.
     pub fn drain(&mut self) -> Vec<Event> {
         self.queue.drain(..).collect()
     }
 
+    /// Return `true` if the queue contains at least one event.
     pub fn has_pending(&self) -> bool {
         !self.queue.is_empty()
     }

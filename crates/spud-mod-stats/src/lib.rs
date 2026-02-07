@@ -7,6 +7,10 @@ use ratatui::{
 
 use spud_core::{event::Event, module::{HudContribution, Module}};
 
+/// System-stats module (stub).
+///
+/// Will eventually display CPU, memory, and SPUD telemetry metrics. Currently
+/// renders placeholder text in the hero area.
 pub struct StatsModule;
 
 impl Default for StatsModule {
@@ -14,6 +18,7 @@ impl Default for StatsModule {
 }
 
 impl StatsModule {
+    /// Create a new `StatsModule`.
     pub fn new() -> Self { Self }
 }
 

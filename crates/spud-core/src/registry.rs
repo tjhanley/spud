@@ -5,6 +5,11 @@ use anyhow::{bail, Result};
 use crate::event::Event;
 use crate::module::Module;
 
+/// Owns and manages all registered SPUD modules.
+///
+/// Modules are stored in insertion order and indexed by their unique
+/// [`Module::id`]. The registry tracks which module is currently active and
+/// provides cycling, activation, and event broadcasting.
 pub struct ModuleRegistry {
     modules: Vec<Box<dyn Module>>,
     active_idx: Option<usize>,
@@ -18,6 +23,7 @@ impl Default for ModuleRegistry {
 }
 
 impl ModuleRegistry {
+    /// Create an empty registry with no modules.
     pub fn new() -> Self {
         Self {
             modules: Vec::new(),
@@ -26,6 +32,11 @@ impl ModuleRegistry {
         }
     }
 
+    /// Register a module. The first module registered is automatically activated.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a module with the same ID is already registered.
     pub fn register(&mut self, module: Box<dyn Module>) -> Result<()> {
         let id = module.id().to_string();
         if self.index.contains_key(&id) {
@@ -40,7 +51,14 @@ impl ModuleRegistry {
         Ok(())
     }
 
-    /// Activate a module by ID. Returns lifecycle events (deactivated old, activated new).
+    /// Activate a module by ID, returning lifecycle events.
+    ///
+    /// Returns a `ModuleDeactivated` event for the previously active module
+    /// (if different) followed by a `ModuleActivated` event for the new one.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no module with the given ID exists.
     pub fn activate(&mut self, id: &str) -> Result<Vec<Event>> {
         let idx = self.index.get(id).copied();
         match idx {
@@ -61,18 +79,22 @@ impl ModuleRegistry {
         }
     }
 
+    /// Return a reference to the currently active module, or `None` if empty.
     pub fn active(&self) -> Option<&dyn Module> {
         self.active_idx.map(|i| &*self.modules[i])
     }
 
+    /// Return a mutable reference to the currently active module.
     pub fn active_mut(&mut self) -> Option<&mut (dyn Module + 'static)> {
         self.active_idx.map(|i| &mut *self.modules[i])
     }
 
+    /// Return the ID of the currently active module, or `None` if empty.
     pub fn active_id(&self) -> Option<&str> {
         self.active_idx.map(|i| self.modules[i].id())
     }
 
+    /// Cycle to the next module (wrapping around), returning lifecycle events.
     pub fn cycle_next(&mut self) -> Vec<Event> {
         if self.modules.is_empty() {
             return Vec::new();
@@ -82,6 +104,7 @@ impl ModuleRegistry {
         self.switch_to(cur, next)
     }
 
+    /// Cycle to the previous module (wrapping around), returning lifecycle events.
     pub fn cycle_prev(&mut self) -> Vec<Event> {
         if self.modules.is_empty() {
             return Vec::new();
@@ -95,6 +118,7 @@ impl ModuleRegistry {
         self.switch_to(cur, next)
     }
 
+    /// Internal helper to switch between two module indices.
     fn switch_to(&mut self, from: usize, to: usize) -> Vec<Event> {
         let mut events = Vec::new();
         if from != to {
@@ -109,29 +133,38 @@ impl ModuleRegistry {
         events
     }
 
+    /// Return `(id, title)` pairs for all registered modules in order.
     pub fn list(&self) -> Vec<(&str, &str)> {
         self.modules.iter().map(|m| (m.id(), m.title())).collect()
     }
 
+    /// Look up a module by ID.
     pub fn get(&self, id: &str) -> Option<&dyn Module> {
         self.index.get(id).map(|&i| &*self.modules[i])
     }
 
+    /// Look up a module by ID (mutable).
     pub fn get_mut(&mut self, id: &str) -> Option<&mut (dyn Module + 'static)> {
         self.index.get(id).copied().map(|i| &mut *self.modules[i])
     }
 
+    /// Return the number of registered modules.
     pub fn len(&self) -> usize {
         self.modules.len()
     }
 
+    /// Return `true` if no modules are registered.
     pub fn is_empty(&self) -> bool {
         self.modules.is_empty()
     }
 
     /// Broadcast an event to modules.
-    /// Tick and Resize go to all modules; Key goes to active only.
-    /// Lifecycle events go to the relevant module.
+    ///
+    /// Routing rules:
+    /// - `Tick` and `Resize` — sent to **all** modules.
+    /// - `Key` — sent to the **active** module only.
+    /// - `ModuleActivated` / `ModuleDeactivated` — sent to the **named** module.
+    /// - Everything else (`Telemetry`, `Custom`, `Quit`) — sent to **all** modules.
     pub fn broadcast(&mut self, event: &Event) {
         match event {
             Event::Tick { .. } | Event::Resize { .. } => {
@@ -155,7 +188,6 @@ impl ModuleRegistry {
                 }
             }
             _ => {
-                // Telemetry, Custom, Quit — broadcast to all
                 for m in &mut self.modules {
                     m.handle_event(event);
                 }
@@ -276,7 +308,7 @@ mod tests {
         reg.cycle_next();
         assert_eq!(reg.active_id(), Some("c"));
         reg.cycle_next();
-        assert_eq!(reg.active_id(), Some("a")); // wraps
+        assert_eq!(reg.active_id(), Some("a"));
     }
 
     #[test]
@@ -299,7 +331,7 @@ mod tests {
 
         assert_eq!(reg.active_id(), Some("a"));
         reg.cycle_prev();
-        assert_eq!(reg.active_id(), Some("c")); // wraps
+        assert_eq!(reg.active_id(), Some("c"));
         reg.cycle_prev();
         assert_eq!(reg.active_id(), Some("b"));
     }
@@ -351,7 +383,6 @@ mod tests {
         reg.register(Box::new(FakeModule::with_log("a", "Alpha", log_a.clone()))).unwrap();
         reg.register(Box::new(FakeModule::with_log("b", "Beta", log_b.clone()))).unwrap();
 
-        // Active is "a"
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::Char('x'),
             crossterm::event::KeyModifiers::NONE,

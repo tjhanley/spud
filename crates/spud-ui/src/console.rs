@@ -9,7 +9,12 @@ use ratatui::{
 use spud_core::console::Console;
 use spud_core::logging::LogLevel;
 
-/// Render the console overlay covering the top half of the screen.
+/// Render the drop-down console overlay covering the top half of the screen.
+///
+/// The overlay consists of three bands:
+/// 1. **Title bar** — shows `CONSOLE` label, current TPS, and close hint.
+/// 2. **Log area** — colour-coded log entries with scroll support.
+/// 3. **Input line** — single-line command input with cursor.
 pub fn render_console(f: &mut Frame, area: Rect, console: &Console, tps: f64) {
     let overlay_height = area.height / 2;
     let overlay = Rect {

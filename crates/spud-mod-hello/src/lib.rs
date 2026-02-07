@@ -7,6 +7,11 @@ use ratatui::{
 
 use spud_core::{event::Event, module::{HudContribution, Module}};
 
+/// A minimal welcome-screen module.
+///
+/// Displays the SPUD title and a "Hello World" message in the hero area.
+/// Serves as the default landing module and a reference implementation for
+/// the [`Module`] trait.
 pub struct HelloModule;
 
 impl Default for HelloModule {
@@ -14,6 +19,7 @@ impl Default for HelloModule {
 }
 
 impl HelloModule {
+    /// Create a new `HelloModule`.
     pub fn new() -> Self { Self }
 }
 

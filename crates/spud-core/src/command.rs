@@ -6,33 +6,49 @@ use crate::console::Console;
 use crate::fps::TickCounter;
 use crate::registry::ModuleRegistry;
 
-/// Output from a command execution.
+/// The result of executing a console command.
 pub enum CommandOutput {
     /// Lines to display in the console.
     Lines(Vec<String>),
-    /// Signal that the app should quit.
+    /// Signal that the application should quit.
     Quit,
 }
 
-/// Context available to commands during execution.
+/// Shared context passed to every command during execution.
+///
+/// Provides mutable access to the module registry, console, and event bus so
+/// that commands can inspect and modify application state.
 pub struct CommandContext<'a> {
+    /// The module registry (for listing/switching modules).
     pub registry: &'a mut ModuleRegistry,
+    /// The console state (for clearing logs, etc.).
     pub console: &'a mut Console,
+    /// The event bus (for publishing lifecycle events).
     pub bus: &'a mut EventBus,
+    /// The tick counter (for reading TPS).
     pub tick_counter: &'a TickCounter,
+    /// When the application started (for uptime calculation).
     pub started_at: Instant,
 }
 
-/// A console command.
+/// Trait implemented by each console command.
+///
+/// Commands are registered with [`CommandRegistry`] and invoked when the user
+/// types their name (or an alias) in the console input line.
 pub trait Command: Send + Sync {
+    /// The primary name used to invoke this command (e.g. `"help"`).
     fn name(&self) -> &str;
+    /// Alternative names that also invoke this command (e.g. `["?"]`).
     fn aliases(&self) -> &[&str] { &[] }
+    /// A one-line description shown in the help listing.
     fn description(&self) -> &str;
+    /// Usage string shown in help detail (e.g. `"switch <module_id>"`).
     fn usage(&self) -> &str { self.name() }
+    /// Execute the command with the given arguments and context.
     fn execute(&self, args: &[&str], ctx: &mut CommandContext) -> CommandOutput;
 }
 
-/// Registry of console commands.
+/// Stores and looks up console commands by name and alias.
 pub struct CommandRegistry {
     commands: Vec<Box<dyn Command>>,
     lookup: HashMap<String, usize>,
@@ -45,6 +61,7 @@ impl Default for CommandRegistry {
 }
 
 impl CommandRegistry {
+    /// Create an empty command registry.
     pub fn new() -> Self {
         Self {
             commands: Vec::new(),
@@ -52,6 +69,7 @@ impl CommandRegistry {
         }
     }
 
+    /// Register a command, indexing it by its name and all aliases.
     pub fn register(&mut self, cmd: Box<dyn Command>) {
         let idx = self.commands.len();
         self.lookup.insert(cmd.name().to_string(), idx);
@@ -61,6 +79,9 @@ impl CommandRegistry {
         self.commands.push(cmd);
     }
 
+    /// Parse and execute a command string (e.g. `"switch stats"`).
+    ///
+    /// Returns an error message as `Lines` if the command is not found.
     pub fn execute(&self, input: &str, ctx: &mut CommandContext) -> CommandOutput {
         let parts: Vec<&str> = input.split_whitespace().collect();
         if parts.is_empty() {
@@ -85,6 +106,8 @@ impl CommandRegistry {
 
 // ── Built-in commands ──
 
+/// Built-in command that lists all registered commands or shows help for a
+/// specific command.
 pub struct HelpCommand;
 
 impl Command for HelpCommand {
@@ -103,6 +126,7 @@ impl Command for HelpCommand {
     }
 }
 
+/// Built-in command that clears all log lines from the console overlay.
 pub struct ClearCommand;
 
 impl Command for ClearCommand {
@@ -116,6 +140,7 @@ impl Command for ClearCommand {
     }
 }
 
+/// Built-in command that lists all registered modules, marking the active one.
 pub struct ModulesCommand;
 
 impl Command for ModulesCommand {
@@ -133,6 +158,7 @@ impl Command for ModulesCommand {
     }
 }
 
+/// Built-in command that switches the active module by ID.
 pub struct SwitchCommand;
 
 impl Command for SwitchCommand {
@@ -158,6 +184,7 @@ impl Command for SwitchCommand {
     }
 }
 
+/// Built-in command that signals the application to exit.
 pub struct QuitCommand;
 
 impl Command for QuitCommand {
@@ -170,6 +197,7 @@ impl Command for QuitCommand {
     }
 }
 
+/// Built-in command that displays how long the application has been running.
 pub struct UptimeCommand;
 
 impl Command for UptimeCommand {
@@ -187,6 +215,7 @@ impl Command for UptimeCommand {
     }
 }
 
+/// Built-in command that shows the current ticks-per-second rate.
 pub struct TpsCommand;
 
 impl Command for TpsCommand {
@@ -199,6 +228,7 @@ impl Command for TpsCommand {
     }
 }
 
+/// Built-in command that prints its arguments back to the console.
 pub struct EchoCommand;
 
 impl Command for EchoCommand {
@@ -212,7 +242,10 @@ impl Command for EchoCommand {
     }
 }
 
-/// Create a CommandRegistry pre-loaded with all built-in commands.
+/// Create a [`CommandRegistry`] pre-loaded with all built-in commands.
+///
+/// Registers: `help`, `clear`, `modules`, `switch`, `quit`, `uptime`, `tps`,
+/// and `echo`.
 pub fn builtin_registry() -> CommandRegistry {
     let mut reg = CommandRegistry::new();
     reg.register(Box::new(HelpCommand));

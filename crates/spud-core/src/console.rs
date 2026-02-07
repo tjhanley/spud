@@ -2,10 +2,18 @@ use std::collections::VecDeque;
 
 use crate::logging::LogEntry;
 
+/// Drop-down console state.
+///
+/// Manages visibility, a ring buffer of log lines, a single-line input buffer
+/// with cursor, and scroll position. The console does **not** own rendering —
+/// see [`spud_ui::console::render_console`] for the TUI layer.
 pub struct Console {
+    /// Whether the console overlay is currently visible.
     pub visible: bool,
     log_lines: VecDeque<LogEntry>,
+    /// The current text in the input line.
     pub input_buffer: String,
+    /// Byte offset of the cursor within `input_buffer`.
     pub cursor_pos: usize,
     scroll_offset: usize,
     max_lines: usize,
@@ -18,6 +26,7 @@ impl Default for Console {
 }
 
 impl Console {
+    /// Create a new console with the given maximum log line capacity.
     pub fn new(max_lines: usize) -> Self {
         Self {
             visible: false,
@@ -29,14 +38,15 @@ impl Console {
         }
     }
 
+    /// Toggle the console's visibility.
     pub fn toggle(&mut self) {
         self.visible = !self.visible;
     }
 
+    /// Append a log entry. Drops the oldest entry if the buffer is full.
     pub fn push_log(&mut self, entry: LogEntry) {
         if self.log_lines.len() >= self.max_lines {
             self.log_lines.pop_front();
-            // Adjust scroll offset if we're scrolled up
             if self.scroll_offset > 0 {
                 self.scroll_offset = self.scroll_offset.saturating_sub(1);
             }
@@ -44,36 +54,42 @@ impl Console {
         self.log_lines.push_back(entry);
     }
 
+    /// Return a reference to the log line buffer.
     pub fn log_lines(&self) -> &VecDeque<LogEntry> {
         &self.log_lines
     }
 
+    /// Clear all log lines and reset the scroll position.
     pub fn clear_logs(&mut self) {
         self.log_lines.clear();
         self.scroll_offset = 0;
     }
 
+    /// Return the current scroll offset (0 = bottom / most recent).
     pub fn scroll_offset(&self) -> usize {
         self.scroll_offset
     }
 
+    /// Scroll up (toward older entries) by `amount` lines, clamped to bounds.
     pub fn scroll_up(&mut self, amount: usize) {
         let max_offset = self.log_lines.len().saturating_sub(1);
         self.scroll_offset = (self.scroll_offset + amount).min(max_offset);
     }
 
+    /// Scroll down (toward newer entries) by `amount` lines, clamped to 0.
     pub fn scroll_down(&mut self, amount: usize) {
         self.scroll_offset = self.scroll_offset.saturating_sub(amount);
     }
 
+    /// Insert a character at the current cursor position.
     pub fn insert_char(&mut self, c: char) {
         self.input_buffer.insert(self.cursor_pos, c);
         self.cursor_pos += c.len_utf8();
     }
 
+    /// Delete the character before the cursor (backspace).
     pub fn backspace(&mut self) {
         if self.cursor_pos > 0 {
-            // Find the previous char boundary
             let prev = self.input_buffer[..self.cursor_pos]
                 .char_indices()
                 .next_back()
@@ -84,6 +100,7 @@ impl Console {
         }
     }
 
+    /// Move the cursor one character to the left.
     pub fn cursor_left(&mut self) {
         if self.cursor_pos > 0 {
             self.cursor_pos = self.input_buffer[..self.cursor_pos]
@@ -94,6 +111,7 @@ impl Console {
         }
     }
 
+    /// Move the cursor one character to the right.
     pub fn cursor_right(&mut self) {
         if self.cursor_pos < self.input_buffer.len() {
             self.cursor_pos = self.input_buffer[self.cursor_pos..]
@@ -104,7 +122,7 @@ impl Console {
         }
     }
 
-    /// Submit the current input buffer. Returns the input and clears the buffer.
+    /// Submit the current input, returning the text and clearing the buffer.
     pub fn submit_input(&mut self) -> String {
         let input = self.input_buffer.clone();
         self.input_buffer.clear();
@@ -163,11 +181,11 @@ mod tests {
         }
         c.scroll_up(5);
         assert_eq!(c.scroll_offset(), 5);
-        c.scroll_up(100); // should clamp to max
-        assert_eq!(c.scroll_offset(), 9); // 10 lines, max offset = 9
+        c.scroll_up(100);
+        assert_eq!(c.scroll_offset(), 9);
         c.scroll_down(3);
         assert_eq!(c.scroll_offset(), 6);
-        c.scroll_down(100); // should clamp to 0
+        c.scroll_down(100);
         assert_eq!(c.scroll_offset(), 0);
     }
 
