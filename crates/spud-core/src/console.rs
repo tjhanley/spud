@@ -44,8 +44,6 @@ impl Default for Console {
 impl Console {
     /// Create a new console with the given maximum log line capacity.
     ///
-    /// # Panics
-    /// Panics (in debug builds) if `slide_duration` is zero.
     pub fn new(max_lines: usize) -> Self {
         let slide_duration = Duration::from_millis(250);
         debug_assert!(!slide_duration.is_zero(), "slide_duration must be > 0");
