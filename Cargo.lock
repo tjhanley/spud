@@ -1256,6 +1256,7 @@ version = "0.1.0"
 dependencies = [
  "ratatui",
  "spud-core",
+ "unicode-width",
 ]
 
 [[package]]

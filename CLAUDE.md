@@ -57,7 +57,7 @@ Drop-down console uses `SlideState` enum for time-based slide animation (250ms).
 - **Docs**: `///` doc comments on all public types and methods.
 - **Time arithmetic**: Always use `checked_duration_since` on `Instant` to avoid panics.
 - **Module identifiers**: `&'static str` for id/title, not `String`.
-- **Dependencies**: Major-version pins (`anyhow = "1"`). Path deps for workspace crates.
+- **Dependencies**: Major-version pins (`anyhow = "1"`). Path deps for workspace crates. New third-party deps go in `[workspace.dependencies]` in the root `Cargo.toml`, then referenced with `{ workspace = true }` in crate `Cargo.toml` files.
 - **Crate naming**: `spud-{component}` for infrastructure, `spud-mod-{name}` for modules.
 - **No async** — the entire codebase is synchronous.
 
