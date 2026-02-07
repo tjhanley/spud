@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
+use crate::bus::EventBus;
 use crate::console::Console;
 use crate::fps::TickCounter;
 use crate::registry::ModuleRegistry;
@@ -17,6 +18,7 @@ pub enum CommandOutput {
 pub struct CommandContext<'a> {
     pub registry: &'a mut ModuleRegistry,
     pub console: &'a mut Console,
+    pub bus: &'a mut EventBus,
     pub tick_counter: &'a TickCounter,
     pub started_at: Instant,
 }
@@ -92,14 +94,11 @@ impl Command for HelpCommand {
     fn usage(&self) -> &str { "help [command]" }
 
     fn execute(&self, args: &[&str], _ctx: &mut CommandContext) -> CommandOutput {
-        // Note: we can't access the CommandRegistry from inside a command easily,
-        // so help with args is handled specially by the caller. This returns generic help.
         if !args.is_empty() {
             return CommandOutput::Lines(vec![
                 format!("help for '{}' — use 'help' to list all commands", args[0]),
             ]);
         }
-        // Placeholder — the real help list is injected by the caller
         CommandOutput::Lines(vec!["Type 'help' to list all commands.".into()])
     }
 }
@@ -147,7 +146,10 @@ impl Command for SwitchCommand {
             return CommandOutput::Lines(vec!["usage: switch <module_id>".into()]);
         }
         match ctx.registry.activate(args[0]) {
-            Ok(_events) => {
+            Ok(events) => {
+                for ev in events {
+                    ctx.bus.publish(ev);
+                }
                 let title = ctx.registry.active().map(|m| m.title()).unwrap_or("?");
                 CommandOutput::Lines(vec![format!("Switched to: {}", title)])
             }
@@ -227,7 +229,9 @@ pub fn builtin_registry() -> CommandRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bus::EventBus;
     use crate::console::Console;
+    use crate::event::Event;
     use crate::fps::TickCounter;
     use crate::module::Module;
     use crate::registry::ModuleRegistry;
@@ -241,19 +245,20 @@ mod tests {
         fn title(&self) -> &'static str { self.title }
     }
 
-    fn make_ctx() -> (ModuleRegistry, Console, TickCounter, Instant) {
+    fn make_ctx() -> (ModuleRegistry, Console, EventBus, TickCounter, Instant) {
         let mut reg = ModuleRegistry::new();
         reg.register(Box::new(FakeModule { id: "hello", title: "Hello" })).unwrap();
         reg.register(Box::new(FakeModule { id: "stats", title: "Stats" })).unwrap();
-        (reg, Console::default(), TickCounter::default(), Instant::now())
+        (reg, Console::default(), EventBus::new(), TickCounter::default(), Instant::now())
     }
 
-    fn ctx_from(parts: &mut (ModuleRegistry, Console, TickCounter, Instant)) -> CommandContext<'_> {
+    fn ctx_from(parts: &mut (ModuleRegistry, Console, EventBus, TickCounter, Instant)) -> CommandContext<'_> {
         CommandContext {
             registry: &mut parts.0,
             console: &mut parts.1,
-            tick_counter: &parts.2,
-            started_at: parts.3,
+            bus: &mut parts.2,
+            tick_counter: &parts.3,
+            started_at: parts.4,
         }
     }
 
@@ -288,7 +293,6 @@ mod tests {
         let reg = builtin_registry();
         let mut parts = make_ctx();
         let mut ctx = ctx_from(&mut parts);
-        // "echo hello world" should parse "echo" as command, ["hello", "world"] as args
         match reg.execute("echo hello world", &mut ctx) {
             CommandOutput::Lines(lines) => assert_eq!(lines[0], "hello world"),
             _ => panic!("expected Lines"),
@@ -302,12 +306,10 @@ mod tests {
         let reg = builtin_registry();
         let mut parts = make_ctx();
         let mut ctx = ctx_from(&mut parts);
-        // "?" is an alias for "help"
         match reg.execute("?", &mut ctx) {
-            CommandOutput::Lines(_) => {} // just checking it resolves
+            CommandOutput::Lines(_) => {}
             _ => panic!("expected Lines"),
         }
-        // "cls" is an alias for "clear"
         match reg.execute("cls", &mut ctx) {
             CommandOutput::Lines(_) => {}
             _ => panic!("expected Lines"),
@@ -352,7 +354,6 @@ mod tests {
                 assert_eq!(lines.len(), 2);
                 assert!(lines[0].contains("hello"));
                 assert!(lines[1].contains("stats"));
-                // Active module should be marked
                 assert!(lines[0].contains("*"));
             }
             _ => panic!("expected Lines"),
@@ -371,6 +372,18 @@ mod tests {
             _ => panic!("expected Lines"),
         }
         assert_eq!(parts.0.active_id(), Some("stats"));
+    }
+
+    #[test]
+    fn switch_command_publishes_lifecycle_events() {
+        let reg = builtin_registry();
+        let mut parts = make_ctx();
+        let mut ctx = ctx_from(&mut parts);
+        reg.execute("switch stats", &mut ctx);
+        let events = parts.2.drain();
+        assert_eq!(events.len(), 2);
+        assert!(matches!(&events[0], Event::ModuleDeactivated { id } if id == "hello"));
+        assert!(matches!(&events[1], Event::ModuleActivated { id } if id == "stats"));
     }
 
     #[test]

@@ -72,6 +72,24 @@ pub fn log_dir() -> PathBuf {
 }
 
 const MAX_CONSOLE_LINES: usize = 1000;
+const LOG_RETENTION_DAYS: u64 = 7;
+
+/// Remove log files older than `max_age_days` from the given directory.
+fn cleanup_old_logs(log_path: &std::path::Path, max_age_days: u64) {
+    let cutoff = std::time::SystemTime::now()
+        - std::time::Duration::from_secs(max_age_days * 86400);
+    if let Ok(entries) = std::fs::read_dir(log_path) {
+        for entry in entries.flatten() {
+            if let Ok(meta) = entry.metadata() {
+                if let Ok(modified) = meta.modified() {
+                    if modified < cutoff {
+                        let _ = std::fs::remove_file(entry.path());
+                    }
+                }
+            }
+        }
+    }
+}
 
 /// A tracing layer that pushes log entries into a shared ring buffer.
 struct ConsoleLayer {
@@ -95,9 +113,12 @@ impl<S: tracing::Subscriber> Layer<S> for ConsoleLayer {
 
         let target = event.metadata().target().to_string();
 
-        let mut visitor = MessageVisitor(String::new());
+        let mut visitor = MessageVisitor {
+            message: None,
+            fields: Vec::new(),
+        };
         event.record(&mut visitor);
-        let message = visitor.0;
+        let message = visitor.finish();
 
         let entry = LogEntry { level, target, message };
 
@@ -110,26 +131,36 @@ impl<S: tracing::Subscriber> Layer<S> for ConsoleLayer {
     }
 }
 
-struct MessageVisitor(String);
+struct MessageVisitor {
+    message: Option<String>,
+    fields: Vec<String>,
+}
+
+impl MessageVisitor {
+    fn finish(self) -> String {
+        match self.message {
+            Some(msg) if self.fields.is_empty() => msg,
+            Some(msg) => format!("{} {}", msg, self.fields.join(" ")),
+            None if self.fields.is_empty() => String::new(),
+            None => self.fields.join(" "),
+        }
+    }
+}
 
 impl tracing::field::Visit for MessageVisitor {
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn fmt::Debug) {
         if field.name() == "message" {
-            self.0 = format!("{:?}", value);
-        } else if !self.0.is_empty() {
-            self.0.push_str(&format!(" {}={:?}", field.name(), value));
+            self.message = Some(format!("{:?}", value));
         } else {
-            self.0 = format!("{}={:?}", field.name(), value);
+            self.fields.push(format!("{}={:?}", field.name(), value));
         }
     }
 
     fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
         if field.name() == "message" {
-            self.0 = value.to_string();
-        } else if !self.0.is_empty() {
-            self.0.push_str(&format!(" {}={}", field.name(), value));
+            self.message = Some(value.to_string());
         } else {
-            self.0 = format!("{}={}", field.name(), value);
+            self.fields.push(format!("{}={}", field.name(), value));
         }
     }
 }
@@ -147,8 +178,11 @@ pub fn init() -> LogBuffer {
         .unwrap_or_else(|_| EnvFilter::new("info"));
 
     let log_path = log_dir();
-    // Ensure log directory exists
-    let _ = std::fs::create_dir_all(&log_path);
+    if let Err(e) = std::fs::create_dir_all(&log_path) {
+        eprintln!("warning: failed to create log directory {:?}: {}", log_path, e);
+    }
+
+    cleanup_old_logs(&log_path, LOG_RETENTION_DAYS);
 
     let file_appender = rolling::daily(&log_path, "spud.log");
     let file_layer = tracing_subscriber::fmt::layer()
@@ -173,32 +207,41 @@ pub fn init() -> LogBuffer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex as StdMutex;
+
+    // Serialize env-mutating tests to avoid data races.
+    static ENV_LOCK: StdMutex<()> = StdMutex::new(());
 
     #[test]
     fn log_dir_respects_env_override() {
-        // Save/restore env to avoid test pollution
+        let _guard = ENV_LOCK.lock().unwrap();
         let original = std::env::var("SPUD_LOG_DIR").ok();
-        std::env::set_var("SPUD_LOG_DIR", "/tmp/spud-test-logs");
+
+        unsafe { std::env::set_var("SPUD_LOG_DIR", "/tmp/spud-test-logs") };
         assert_eq!(log_dir(), PathBuf::from("/tmp/spud-test-logs"));
+
         match original {
-            Some(v) => std::env::set_var("SPUD_LOG_DIR", v),
-            None => std::env::remove_var("SPUD_LOG_DIR"),
+            Some(v) => unsafe { std::env::set_var("SPUD_LOG_DIR", v) },
+            None => unsafe { std::env::remove_var("SPUD_LOG_DIR") },
         }
     }
 
     #[test]
     fn log_dir_default_on_macos() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let original = std::env::var("SPUD_LOG_DIR").ok();
-        std::env::remove_var("SPUD_LOG_DIR");
+
+        unsafe { std::env::remove_var("SPUD_LOG_DIR") };
         let dir = log_dir();
+
         #[cfg(target_os = "macos")]
         {
             let expected = dirs::home_dir().unwrap().join("Library/Logs/spud");
             assert_eq!(dir, expected);
         }
-        match original {
-            Some(v) => std::env::set_var("SPUD_LOG_DIR", v),
-            None => {}
+
+        if let Some(v) = original {
+            unsafe { std::env::set_var("SPUD_LOG_DIR", v) };
         }
     }
 
@@ -244,5 +287,61 @@ mod tests {
         assert_eq!(format!("{}", LogLevel::Info), "INFO");
         assert_eq!(format!("{}", LogLevel::Warn), "WARN");
         assert_eq!(format!("{}", LogLevel::Error), "ERROR");
+    }
+
+    #[test]
+    fn message_visitor_message_only() {
+        let v = MessageVisitor {
+            message: Some("hello".into()),
+            fields: Vec::new(),
+        };
+        assert_eq!(v.finish(), "hello");
+    }
+
+    #[test]
+    fn message_visitor_fields_preserved() {
+        let v = MessageVisitor {
+            message: Some("hello".into()),
+            fields: vec!["key=val".into()],
+        };
+        let result = v.finish();
+        assert!(result.contains("hello"));
+        assert!(result.contains("key=val"));
+    }
+
+    #[test]
+    fn message_visitor_fields_without_message() {
+        let v = MessageVisitor {
+            message: None,
+            fields: vec!["a=1".into(), "b=2".into()],
+        };
+        assert_eq!(v.finish(), "a=1 b=2");
+    }
+
+    #[test]
+    fn message_visitor_empty() {
+        let v = MessageVisitor {
+            message: None,
+            fields: Vec::new(),
+        };
+        assert_eq!(v.finish(), "");
+    }
+
+    #[test]
+    fn cleanup_old_logs_removes_stale_files() {
+        let tmp = std::env::temp_dir().join("spud-test-cleanup");
+        let _ = std::fs::create_dir_all(&tmp);
+
+        let file_a = tmp.join("a.log");
+        let file_b = tmp.join("b.log");
+        std::fs::write(&file_a, "a").unwrap();
+        std::fs::write(&file_b, "b").unwrap();
+
+        // max_age_days=0 means cutoff is "now", so all files get cleaned
+        cleanup_old_logs(&tmp, 0);
+        assert!(!file_a.exists());
+        assert!(!file_b.exists());
+
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }

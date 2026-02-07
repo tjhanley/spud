@@ -101,6 +101,7 @@ impl App {
         let mut ctx = CommandContext {
             registry: &mut self.registry,
             console: &mut self.console,
+            bus: &mut self.bus,
             tick_counter: &self.tick_counter,
             started_at: self.state.started_at,
         };
