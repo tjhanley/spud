@@ -61,6 +61,12 @@ Drop-down console uses `SlideState` enum for time-based slide animation (250ms).
 - **Crate naming**: `spud-{component}` for infrastructure, `spud-mod-{name}` for modules.
 - **No async** — the entire codebase is synchronous.
 
+## Git Workflow
+
+- Always create a feature branch before making changes — never commit directly to `main`.
+- Branch naming: `tjh/<issue-number>-<feature-name>` (e.g. `tjh/19-remove-ratatui-from-core`).
+- Push the feature branch and open a PR linked to the issue.
+
 ## PR Checklist
 
 - `cargo test --workspace` passes
