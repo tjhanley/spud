@@ -192,7 +192,8 @@ fn main() -> Result<()> {
 
 fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer) -> Result<()> {
     let mut app = App::new(log_buffer)?;
-    let tick_rate = Duration::from_millis(100);
+    let tick_interval = Duration::from_millis(100);
+    let poll_timeout = Duration::from_millis(1);
     let mut last_tick = Instant::now();
 
     loop {
@@ -242,8 +243,7 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
         })?;
 
         // ── Poll → Publish ──
-        let timeout = tick_rate.saturating_sub(last_tick.elapsed());
-        if event::poll(timeout)? {
+        if event::poll(poll_timeout)? {
             match event::read()? {
                 CEvent::Key(key) => {
                     // Tilde always toggles the console
@@ -295,7 +295,7 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
             }
         }
 
-        if last_tick.elapsed() >= tick_rate {
+        if last_tick.elapsed() >= tick_interval {
             last_tick = Instant::now();
             app.tick_counter.tick(last_tick);
             app.bus.publish(Event::Tick { now: last_tick });
