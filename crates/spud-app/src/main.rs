@@ -243,7 +243,7 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
         })?;
 
         // ── Poll → Publish ──
-        if event::poll(Duration::from_millis(16))? {
+        if event::poll(poll_timeout)? {
             match event::read()? {
                 CEvent::Key(key) => {
                     // Tilde always toggles the console
