@@ -74,12 +74,21 @@ pub fn log_dir() -> PathBuf {
 const MAX_CONSOLE_LINES: usize = 1000;
 const LOG_RETENTION_DAYS: u64 = 7;
 
-/// Remove log files older than `max_age_days` from the given directory.
+/// Remove SPUD log files older than `max_age_days` from the given directory.
+///
+/// Only deletes files whose name starts with `spud.log` (the prefix used by
+/// the daily rolling appender) to avoid accidentally removing unrelated files
+/// if the log directory is shared.
 fn cleanup_old_logs(log_path: &std::path::Path, max_age_days: u64) {
     let cutoff = std::time::SystemTime::now()
         - std::time::Duration::from_secs(max_age_days * 86400);
     if let Ok(entries) = std::fs::read_dir(log_path) {
         for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if !name.starts_with("spud.log") {
+                continue;
+            }
             if let Ok(meta) = entry.metadata() {
                 if let Ok(modified) = meta.modified() {
                     if modified < cutoff {
@@ -332,15 +341,18 @@ mod tests {
         let tmp = std::env::temp_dir().join("spud-test-cleanup");
         let _ = std::fs::create_dir_all(&tmp);
 
-        let file_a = tmp.join("a.log");
-        let file_b = tmp.join("b.log");
-        std::fs::write(&file_a, "a").unwrap();
-        std::fs::write(&file_b, "b").unwrap();
+        let spud_a = tmp.join("spud.log.2025-01-01");
+        let spud_b = tmp.join("spud.log.2025-01-02");
+        let other = tmp.join("other.txt");
+        std::fs::write(&spud_a, "a").unwrap();
+        std::fs::write(&spud_b, "b").unwrap();
+        std::fs::write(&other, "c").unwrap();
 
-        // max_age_days=0 means cutoff is "now", so all files get cleaned
+        // max_age_days=0 means cutoff is "now", so all matching files get cleaned
         cleanup_old_logs(&tmp, 0);
-        assert!(!file_a.exists());
-        assert!(!file_b.exists());
+        assert!(!spud_a.exists(), "spud log file should be deleted");
+        assert!(!spud_b.exists(), "spud log file should be deleted");
+        assert!(other.exists(), "non-spud file should be preserved");
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
