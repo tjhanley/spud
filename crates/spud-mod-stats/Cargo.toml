@@ -7,3 +7,4 @@ edition = "2021"
 ratatui = { workspace = true }
 spud-core = { path = "../spud-core" }
 spud-ui = { path = "../spud-ui" }
+sysinfo = { workspace = true }
