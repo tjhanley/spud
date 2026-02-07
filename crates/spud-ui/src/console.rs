@@ -1,9 +1,9 @@
 use ratatui::{
-    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
+    Frame,
 };
 
 use spud_core::console::Console;
@@ -15,7 +15,14 @@ use spud_core::logging::LogLevel;
 /// 1. **Title bar** — shows `CONSOLE` label, current TPS, and close hint.
 /// 2. **Log area** — colour-coded log entries with scroll support.
 /// 3. **Input line** — single-line command input with cursor.
-pub fn render_console(f: &mut Frame, area: Rect, console: &Console, tps: f64, fraction: f64, show_cursor: bool) {
+pub fn render_console(
+    f: &mut Frame,
+    area: Rect,
+    console: &Console,
+    tps: f64,
+    fraction: f64,
+    show_cursor: bool,
+) {
     let max_height = area.height / 2;
     let mut overlay_height = ((max_height as f64) * fraction).round() as u16;
     // Need at least 3 rows for title + log + input; clamp during animation,
@@ -40,15 +47,21 @@ pub fn render_console(f: &mut Frame, area: Rect, console: &Console, tps: f64, fr
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1),    // title bar
-            Constraint::Min(1),      // log area
-            Constraint::Length(1),    // input line
+            Constraint::Length(1), // title bar
+            Constraint::Min(1),    // log area
+            Constraint::Length(1), // input line
         ])
         .split(overlay);
 
     // Title bar with TPS
     let title = Line::from(vec![
-        Span::styled(" CONSOLE ", Style::default().fg(Color::Black).bg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            " CONSOLE ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(format!("  TPS: {:.1}  ", tps)),
         Span::styled("~ to close", Style::default().fg(Color::DarkGray)),
     ]);
@@ -77,15 +90,17 @@ pub fn render_console(f: &mut Frame, area: Rect, console: &Console, tps: f64, fr
         .map(|entry| {
             let level_color = match entry.level {
                 LogLevel::Error => Color::Red,
-                LogLevel::Warn  => Color::Yellow,
-                LogLevel::Info  => Color::Green,
+                LogLevel::Warn => Color::Yellow,
+                LogLevel::Info => Color::Green,
                 LogLevel::Debug => Color::Cyan,
                 LogLevel::Trace => Color::DarkGray,
             };
             Line::from(vec![
                 Span::styled(
                     format!(" {:5} ", entry.level),
-                    Style::default().fg(level_color).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(level_color)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
                     format!("[{}] ", entry.target),
@@ -101,13 +116,20 @@ pub fn render_console(f: &mut Frame, area: Rect, console: &Console, tps: f64, fr
         .style(Style::default().bg(Color::Black));
 
     f.render_widget(
-        Paragraph::new(lines).block(log_block).wrap(Wrap { trim: false }),
+        Paragraph::new(lines)
+            .block(log_block)
+            .wrap(Wrap { trim: false }),
         chunks[1],
     );
 
     // Input line
     let input_line = Line::from(vec![
-        Span::styled("> ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "> ",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(&console.input_buffer),
     ]);
     f.render_widget(
@@ -117,9 +139,6 @@ pub fn render_console(f: &mut Frame, area: Rect, console: &Console, tps: f64, fr
 
     // Position cursor in the input field only when fully open
     if show_cursor {
-        f.set_cursor_position((
-            chunks[2].x + 2 + console.cursor_pos as u16,
-            chunks[2].y,
-        ));
+        f.set_cursor_position((chunks[2].x + 2 + console.cursor_pos as u16, chunks[2].y));
     }
 }

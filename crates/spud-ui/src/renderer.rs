@@ -1,4 +1,4 @@
-use ratatui::{Frame, layout::Rect};
+use ratatui::{layout::Rect, Frame};
 
 /// Trait for modules that render content in the hero (main) area.
 ///

@@ -210,17 +210,29 @@ mod tests {
 
     impl FakeModule {
         fn new(id: &'static str, title: &'static str) -> Self {
-            Self { id, title, events: Arc::new(Mutex::new(Vec::new())) }
+            Self {
+                id,
+                title,
+                events: Arc::new(Mutex::new(Vec::new())),
+            }
         }
 
         fn with_log(id: &'static str, title: &'static str, log: Arc<Mutex<Vec<String>>>) -> Self {
-            Self { id, title, events: log }
+            Self {
+                id,
+                title,
+                events: log,
+            }
         }
     }
 
     impl Module for FakeModule {
-        fn id(&self) -> &'static str { self.id }
-        fn title(&self) -> &'static str { self.title }
+        fn id(&self) -> &'static str {
+            self.id
+        }
+        fn title(&self) -> &'static str {
+            self.title
+        }
         fn handle_event(&mut self, ev: &Event) {
             let tag = match ev {
                 Event::Tick { .. } => "tick",
@@ -231,15 +243,21 @@ mod tests {
                 Event::Quit => "quit",
                 _ => "other",
             };
-            self.events.lock().unwrap().push(format!("{}:{}", self.id, tag));
+            self.events
+                .lock()
+                .unwrap()
+                .push(format!("{}:{}", self.id, tag));
         }
-        fn as_any(&self) -> &dyn std::any::Any { self }
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
     }
 
     #[test]
     fn register_adds_module() {
         let mut reg = ModuleRegistry::new();
-        reg.register(Box::new(FakeModule::new("a", "Alpha"))).unwrap();
+        reg.register(Box::new(FakeModule::new("a", "Alpha")))
+            .unwrap();
         assert_eq!(reg.len(), 1);
         assert_eq!(reg.list(), vec![("a", "Alpha")]);
     }
@@ -247,7 +265,8 @@ mod tests {
     #[test]
     fn duplicate_id_returns_error() {
         let mut reg = ModuleRegistry::new();
-        reg.register(Box::new(FakeModule::new("a", "Alpha"))).unwrap();
+        reg.register(Box::new(FakeModule::new("a", "Alpha")))
+            .unwrap();
         let err = reg.register(Box::new(FakeModule::new("a", "Alpha2")));
         assert!(err.is_err());
         assert!(err.unwrap_err().to_string().contains("duplicate module id"));
@@ -256,8 +275,10 @@ mod tests {
     #[test]
     fn activate_by_id() {
         let mut reg = ModuleRegistry::new();
-        reg.register(Box::new(FakeModule::new("a", "Alpha"))).unwrap();
-        reg.register(Box::new(FakeModule::new("b", "Beta"))).unwrap();
+        reg.register(Box::new(FakeModule::new("a", "Alpha")))
+            .unwrap();
+        reg.register(Box::new(FakeModule::new("b", "Beta")))
+            .unwrap();
         reg.activate("b").unwrap();
         assert_eq!(reg.active().unwrap().id(), "b");
     }
@@ -265,7 +286,8 @@ mod tests {
     #[test]
     fn activate_invalid_id_returns_error() {
         let mut reg = ModuleRegistry::new();
-        reg.register(Box::new(FakeModule::new("a", "Alpha"))).unwrap();
+        reg.register(Box::new(FakeModule::new("a", "Alpha")))
+            .unwrap();
         let err = reg.activate("nope");
         assert!(err.is_err());
         assert!(err.unwrap_err().to_string().contains("unknown module id"));
@@ -274,8 +296,10 @@ mod tests {
     #[test]
     fn activate_emits_lifecycle_events() {
         let mut reg = ModuleRegistry::new();
-        reg.register(Box::new(FakeModule::new("a", "Alpha"))).unwrap();
-        reg.register(Box::new(FakeModule::new("b", "Beta"))).unwrap();
+        reg.register(Box::new(FakeModule::new("a", "Alpha")))
+            .unwrap();
+        reg.register(Box::new(FakeModule::new("b", "Beta")))
+            .unwrap();
         let events = reg.activate("b").unwrap();
         assert_eq!(events.len(), 2);
         assert!(matches!(&events[0], Event::ModuleDeactivated { id } if id == "a"));
@@ -285,7 +309,8 @@ mod tests {
     #[test]
     fn first_register_auto_activates() {
         let mut reg = ModuleRegistry::new();
-        reg.register(Box::new(FakeModule::new("a", "Alpha"))).unwrap();
+        reg.register(Box::new(FakeModule::new("a", "Alpha")))
+            .unwrap();
         assert_eq!(reg.active().unwrap().id(), "a");
     }
 
@@ -299,9 +324,12 @@ mod tests {
     #[test]
     fn cycle_next_wraps() {
         let mut reg = ModuleRegistry::new();
-        reg.register(Box::new(FakeModule::new("a", "Alpha"))).unwrap();
-        reg.register(Box::new(FakeModule::new("b", "Beta"))).unwrap();
-        reg.register(Box::new(FakeModule::new("c", "Gamma"))).unwrap();
+        reg.register(Box::new(FakeModule::new("a", "Alpha")))
+            .unwrap();
+        reg.register(Box::new(FakeModule::new("b", "Beta")))
+            .unwrap();
+        reg.register(Box::new(FakeModule::new("c", "Gamma")))
+            .unwrap();
 
         assert_eq!(reg.active_id(), Some("a"));
         reg.cycle_next();
@@ -315,8 +343,10 @@ mod tests {
     #[test]
     fn cycle_next_emits_lifecycle() {
         let mut reg = ModuleRegistry::new();
-        reg.register(Box::new(FakeModule::new("a", "Alpha"))).unwrap();
-        reg.register(Box::new(FakeModule::new("b", "Beta"))).unwrap();
+        reg.register(Box::new(FakeModule::new("a", "Alpha")))
+            .unwrap();
+        reg.register(Box::new(FakeModule::new("b", "Beta")))
+            .unwrap();
         let events = reg.cycle_next();
         assert_eq!(events.len(), 2);
         assert!(matches!(&events[0], Event::ModuleDeactivated { id } if id == "a"));
@@ -326,9 +356,12 @@ mod tests {
     #[test]
     fn cycle_prev_wraps() {
         let mut reg = ModuleRegistry::new();
-        reg.register(Box::new(FakeModule::new("a", "Alpha"))).unwrap();
-        reg.register(Box::new(FakeModule::new("b", "Beta"))).unwrap();
-        reg.register(Box::new(FakeModule::new("c", "Gamma"))).unwrap();
+        reg.register(Box::new(FakeModule::new("a", "Alpha")))
+            .unwrap();
+        reg.register(Box::new(FakeModule::new("b", "Beta")))
+            .unwrap();
+        reg.register(Box::new(FakeModule::new("c", "Gamma")))
+            .unwrap();
 
         assert_eq!(reg.active_id(), Some("a"));
         reg.cycle_prev();
@@ -340,8 +373,10 @@ mod tests {
     #[test]
     fn list_returns_id_title_pairs() {
         let mut reg = ModuleRegistry::new();
-        reg.register(Box::new(FakeModule::new("x", "X-Ray"))).unwrap();
-        reg.register(Box::new(FakeModule::new("y", "Yankee"))).unwrap();
+        reg.register(Box::new(FakeModule::new("x", "X-Ray")))
+            .unwrap();
+        reg.register(Box::new(FakeModule::new("y", "Yankee")))
+            .unwrap();
         assert_eq!(reg.list(), vec![("x", "X-Ray"), ("y", "Yankee")]);
     }
 
@@ -356,7 +391,8 @@ mod tests {
     #[test]
     fn get_and_get_mut_by_id() {
         let mut reg = ModuleRegistry::new();
-        reg.register(Box::new(FakeModule::new("a", "Alpha"))).unwrap();
+        reg.register(Box::new(FakeModule::new("a", "Alpha")))
+            .unwrap();
         assert_eq!(reg.get("a").unwrap().title(), "Alpha");
         assert!(reg.get("z").is_none());
         assert!(reg.get_mut("a").is_some());
@@ -368,10 +404,14 @@ mod tests {
         let log_a = Arc::new(Mutex::new(Vec::new()));
         let log_b = Arc::new(Mutex::new(Vec::new()));
         let mut reg = ModuleRegistry::new();
-        reg.register(Box::new(FakeModule::with_log("a", "Alpha", log_a.clone()))).unwrap();
-        reg.register(Box::new(FakeModule::with_log("b", "Beta", log_b.clone()))).unwrap();
+        reg.register(Box::new(FakeModule::with_log("a", "Alpha", log_a.clone())))
+            .unwrap();
+        reg.register(Box::new(FakeModule::with_log("b", "Beta", log_b.clone())))
+            .unwrap();
 
-        reg.broadcast(&Event::Tick { now: Instant::now() });
+        reg.broadcast(&Event::Tick {
+            now: Instant::now(),
+        });
         assert_eq!(log_a.lock().unwrap().as_slice(), &["a:tick"]);
         assert_eq!(log_b.lock().unwrap().as_slice(), &["b:tick"]);
     }
@@ -381,8 +421,10 @@ mod tests {
         let log_a = Arc::new(Mutex::new(Vec::new()));
         let log_b = Arc::new(Mutex::new(Vec::new()));
         let mut reg = ModuleRegistry::new();
-        reg.register(Box::new(FakeModule::with_log("a", "Alpha", log_a.clone()))).unwrap();
-        reg.register(Box::new(FakeModule::with_log("b", "Beta", log_b.clone()))).unwrap();
+        reg.register(Box::new(FakeModule::with_log("a", "Alpha", log_a.clone())))
+            .unwrap();
+        reg.register(Box::new(FakeModule::with_log("b", "Beta", log_b.clone())))
+            .unwrap();
 
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::Char('x'),
@@ -398,8 +440,10 @@ mod tests {
         let log_a = Arc::new(Mutex::new(Vec::new()));
         let log_b = Arc::new(Mutex::new(Vec::new()));
         let mut reg = ModuleRegistry::new();
-        reg.register(Box::new(FakeModule::with_log("a", "Alpha", log_a.clone()))).unwrap();
-        reg.register(Box::new(FakeModule::with_log("b", "Beta", log_b.clone()))).unwrap();
+        reg.register(Box::new(FakeModule::with_log("a", "Alpha", log_a.clone())))
+            .unwrap();
+        reg.register(Box::new(FakeModule::with_log("b", "Beta", log_b.clone())))
+            .unwrap();
 
         reg.broadcast(&Event::ModuleActivated { id: "b".into() });
         assert!(log_a.lock().unwrap().is_empty());

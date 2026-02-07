@@ -69,8 +69,11 @@ impl Console {
                 // Closing started_at so its fraction equals the same position.
                 // Closing fraction = 1.0 - close_progress, so we need
                 // close_progress = 1.0 - open_fraction.
-                let elapsed = now.checked_duration_since(started_at).unwrap_or(Duration::ZERO);
-                let open_fraction = (elapsed.as_secs_f64() / self.slide_duration.as_secs_f64()).min(1.0);
+                let elapsed = now
+                    .checked_duration_since(started_at)
+                    .unwrap_or(Duration::ZERO);
+                let open_fraction =
+                    (elapsed.as_secs_f64() / self.slide_duration.as_secs_f64()).min(1.0);
                 let elapsed_closing = self.slide_duration.mul_f64(1.0 - open_fraction);
                 SlideState::Closing {
                     started_at: now - elapsed_closing,
@@ -81,8 +84,11 @@ impl Console {
                 // Opening started_at so its fraction equals the same position.
                 // Opening fraction = open_progress, and current fraction =
                 // 1.0 - close_progress, so open_progress = 1.0 - close_progress.
-                let elapsed = now.checked_duration_since(started_at).unwrap_or(Duration::ZERO);
-                let close_progress = (elapsed.as_secs_f64() / self.slide_duration.as_secs_f64()).min(1.0);
+                let elapsed = now
+                    .checked_duration_since(started_at)
+                    .unwrap_or(Duration::ZERO);
+                let close_progress =
+                    (elapsed.as_secs_f64() / self.slide_duration.as_secs_f64()).min(1.0);
                 let elapsed_opening = self.slide_duration.mul_f64(1.0 - close_progress);
                 SlideState::Opening {
                     started_at: now - elapsed_opening,
@@ -95,14 +101,22 @@ impl Console {
     pub fn update(&mut self, now: Instant) {
         self.slide = match self.slide {
             SlideState::Opening { started_at } => {
-                if now.checked_duration_since(started_at).unwrap_or(Duration::ZERO) >= self.slide_duration {
+                if now
+                    .checked_duration_since(started_at)
+                    .unwrap_or(Duration::ZERO)
+                    >= self.slide_duration
+                {
                     SlideState::Open
                 } else {
                     self.slide
                 }
             }
             SlideState::Closing { started_at } => {
-                if now.checked_duration_since(started_at).unwrap_or(Duration::ZERO) >= self.slide_duration {
+                if now
+                    .checked_duration_since(started_at)
+                    .unwrap_or(Duration::ZERO)
+                    >= self.slide_duration
+                {
                     SlideState::Hidden
                 } else {
                     self.slide
@@ -118,11 +132,15 @@ impl Console {
             SlideState::Hidden => 0.0,
             SlideState::Open => 1.0,
             SlideState::Opening { started_at } => {
-                let elapsed = now.checked_duration_since(started_at).unwrap_or(Duration::ZERO);
+                let elapsed = now
+                    .checked_duration_since(started_at)
+                    .unwrap_or(Duration::ZERO);
                 (elapsed.as_secs_f64() / self.slide_duration.as_secs_f64()).min(1.0)
             }
             SlideState::Closing { started_at } => {
-                let elapsed = now.checked_duration_since(started_at).unwrap_or(Duration::ZERO);
+                let elapsed = now
+                    .checked_duration_since(started_at)
+                    .unwrap_or(Duration::ZERO);
                 let progress = (elapsed.as_secs_f64() / self.slide_duration.as_secs_f64()).min(1.0);
                 1.0 - progress
             }
@@ -303,13 +321,19 @@ mod tests {
         // Advance 25% through the animation
         let quarter = start + c.slide_duration() / 4;
         let frac_before = c.overlay_fraction(quarter);
-        assert!((frac_before - 0.25).abs() < 0.01, "expected ~0.25, got {frac_before}");
+        assert!(
+            (frac_before - 0.25).abs() < 0.01,
+            "expected ~0.25, got {frac_before}"
+        );
 
         c.toggle(quarter); // Opening -> Closing (preserving position)
         assert!(matches!(c.slide, SlideState::Closing { .. }));
 
         let frac_after = c.overlay_fraction(quarter);
-        assert!((frac_after - 0.25).abs() < 0.01, "expected ~0.25 after reversal, got {frac_after}");
+        assert!(
+            (frac_after - 0.25).abs() < 0.01,
+            "expected ~0.25 after reversal, got {frac_after}"
+        );
     }
 
     #[test]
@@ -322,13 +346,19 @@ mod tests {
         // Advance 25% through closing (fraction should be 0.75)
         let quarter = start + c.slide_duration() / 4;
         let frac_before = c.overlay_fraction(quarter);
-        assert!((frac_before - 0.75).abs() < 0.01, "expected ~0.75, got {frac_before}");
+        assert!(
+            (frac_before - 0.75).abs() < 0.01,
+            "expected ~0.75, got {frac_before}"
+        );
 
         c.toggle(quarter); // Closing -> Opening (preserving position)
         assert!(matches!(c.slide, SlideState::Opening { .. }));
 
         let frac_after = c.overlay_fraction(quarter);
-        assert!((frac_after - 0.75).abs() < 0.01, "expected ~0.75 after reversal, got {frac_after}");
+        assert!(
+            (frac_after - 0.75).abs() < 0.01,
+            "expected ~0.75 after reversal, got {frac_after}"
+        );
     }
 
     #[test]

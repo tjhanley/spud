@@ -3,8 +3,8 @@ use std::fmt;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 use tracing_appender::rolling;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 
 /// Log severity level (mirrors tracing levels for UI use).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,8 +21,8 @@ impl fmt::Display for LogLevel {
         match self {
             LogLevel::Trace => write!(f, "TRACE"),
             LogLevel::Debug => write!(f, "DEBUG"),
-            LogLevel::Info  => write!(f, "INFO"),
-            LogLevel::Warn  => write!(f, "WARN"),
+            LogLevel::Info => write!(f, "INFO"),
+            LogLevel::Warn => write!(f, "WARN"),
             LogLevel::Error => write!(f, "ERROR"),
         }
     }
@@ -80,8 +80,8 @@ const LOG_RETENTION_DAYS: u64 = 7;
 /// the daily rolling appender) to avoid accidentally removing unrelated files
 /// if the log directory is shared.
 fn cleanup_old_logs(log_path: &std::path::Path, max_age_days: u64) {
-    let cutoff = std::time::SystemTime::now()
-        - std::time::Duration::from_secs(max_age_days * 86400);
+    let cutoff =
+        std::time::SystemTime::now() - std::time::Duration::from_secs(max_age_days * 86400);
     if let Ok(entries) = std::fs::read_dir(log_path) {
         for entry in entries.flatten() {
             let name = entry.file_name();
@@ -115,8 +115,8 @@ impl<S: tracing::Subscriber> Layer<S> for ConsoleLayer {
         let level = match *event.metadata().level() {
             tracing::Level::TRACE => LogLevel::Trace,
             tracing::Level::DEBUG => LogLevel::Debug,
-            tracing::Level::INFO  => LogLevel::Info,
-            tracing::Level::WARN  => LogLevel::Warn,
+            tracing::Level::INFO => LogLevel::Info,
+            tracing::Level::WARN => LogLevel::Warn,
             tracing::Level::ERROR => LogLevel::Error,
         };
 
@@ -129,7 +129,11 @@ impl<S: tracing::Subscriber> Layer<S> for ConsoleLayer {
         event.record(&mut visitor);
         let message = visitor.finish();
 
-        let entry = LogEntry { level, target, message };
+        let entry = LogEntry {
+            level,
+            target,
+            message,
+        };
 
         if let Ok(mut buf) = self.buffer.lock() {
             if buf.len() >= self.max_lines {
@@ -188,7 +192,10 @@ pub fn init() -> LogBuffer {
 
     let log_path = log_dir();
     if let Err(e) = std::fs::create_dir_all(&log_path) {
-        eprintln!("warning: failed to create log directory {:?}: {}", log_path, e);
+        eprintln!(
+            "warning: failed to create log directory {:?}: {}",
+            log_path, e
+        );
     }
 
     cleanup_old_logs(&log_path, LOG_RETENTION_DAYS);

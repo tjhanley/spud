@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ratatui = "0.28"
+ratatui = { workspace = true }
 spud-core = { path = "../spud-core" }
 spud-ui = { path = "../spud-ui" }

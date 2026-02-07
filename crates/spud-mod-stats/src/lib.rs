@@ -1,13 +1,16 @@
 use std::any::Any;
 
 use ratatui::{
-    Frame,
     layout::Rect,
-    widgets::{Block, Borders, Paragraph},
     text::Line,
+    widgets::{Block, Borders, Paragraph},
+    Frame,
 };
 
-use spud_core::{event::Event, module::{HudContribution, Module}};
+use spud_core::{
+    event::Event,
+    module::{HudContribution, Module},
+};
 use spud_ui::renderer::HeroRenderer;
 
 /// System-stats module (stub).
@@ -17,17 +20,25 @@ use spud_ui::renderer::HeroRenderer;
 pub struct StatsModule;
 
 impl Default for StatsModule {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl StatsModule {
     /// Create a new `StatsModule`.
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl Module for StatsModule {
-    fn id(&self) -> &'static str { "stats" }
-    fn title(&self) -> &'static str { "Stats (stub)" }
+    fn id(&self) -> &'static str {
+        "stats"
+    }
+    fn title(&self) -> &'static str {
+        "Stats (stub)"
+    }
 
     fn handle_event(&mut self, _ev: &Event) {}
 
@@ -38,7 +49,9 @@ impl Module for StatsModule {
         }
     }
 
-    fn as_any(&self) -> &dyn Any { self }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 impl HeroRenderer for StatsModule {
