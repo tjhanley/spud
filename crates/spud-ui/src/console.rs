@@ -15,7 +15,7 @@ use spud_core::logging::LogLevel;
 /// 1. **Title bar** — shows `CONSOLE` label, current TPS, and close hint.
 /// 2. **Log area** — colour-coded log entries with scroll support.
 /// 3. **Input line** — single-line command input with cursor.
-pub fn render_console(f: &mut Frame, area: Rect, console: &Console, tps: f64, fraction: f64) {
+pub fn render_console(f: &mut Frame, area: Rect, console: &Console, tps: f64, fraction: f64, show_cursor: bool) {
     let max_height = area.height / 2;
     let mut overlay_height = ((max_height as f64) * fraction).round() as u16;
     // Ensure we have enough height for title, log, and input during animation.
@@ -114,9 +114,11 @@ pub fn render_console(f: &mut Frame, area: Rect, console: &Console, tps: f64, fr
         chunks[2],
     );
 
-    // Position cursor in the input field
-    f.set_cursor_position((
-        chunks[2].x + 2 + console.cursor_pos as u16,
-        chunks[2].y,
-    ));
+    // Position cursor in the input field only when fully open
+    if show_cursor {
+        f.set_cursor_position((
+            chunks[2].x + 2 + console.cursor_pos as u16,
+            chunks[2].y,
+        ));
+    }
 }

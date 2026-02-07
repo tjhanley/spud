@@ -43,10 +43,15 @@ impl Default for Console {
 
 impl Console {
     /// Create a new console with the given maximum log line capacity.
+    ///
+    /// # Panics
+    /// Panics (in debug builds) if `slide_duration` is zero.
     pub fn new(max_lines: usize) -> Self {
+        let slide_duration = Duration::from_millis(250);
+        debug_assert!(!slide_duration.is_zero(), "slide_duration must be > 0");
         Self {
             slide: SlideState::Hidden,
-            slide_duration: Duration::from_millis(250),
+            slide_duration,
             log_lines: VecDeque::with_capacity(max_lines),
             input_buffer: String::new(),
             cursor_pos: 0,
@@ -66,7 +71,7 @@ impl Console {
                 // Closing started_at so its fraction equals the same position.
                 // Closing fraction = 1.0 - close_progress, so we need
                 // close_progress = 1.0 - open_fraction.
-                let elapsed = now.duration_since(started_at);
+                let elapsed = now.checked_duration_since(started_at).unwrap_or(Duration::ZERO);
                 let open_fraction = (elapsed.as_secs_f64() / self.slide_duration.as_secs_f64()).min(1.0);
                 let elapsed_closing = self.slide_duration.mul_f64(1.0 - open_fraction);
                 SlideState::Closing {
@@ -78,7 +83,7 @@ impl Console {
                 // Opening started_at so its fraction equals the same position.
                 // Opening fraction = open_progress, and current fraction =
                 // 1.0 - close_progress, so open_progress = 1.0 - close_progress.
-                let elapsed = now.duration_since(started_at);
+                let elapsed = now.checked_duration_since(started_at).unwrap_or(Duration::ZERO);
                 let close_progress = (elapsed.as_secs_f64() / self.slide_duration.as_secs_f64()).min(1.0);
                 let elapsed_opening = self.slide_duration.mul_f64(1.0 - close_progress);
                 SlideState::Opening {
@@ -92,14 +97,14 @@ impl Console {
     pub fn update(&mut self, now: Instant) {
         self.slide = match self.slide {
             SlideState::Opening { started_at } => {
-                if now.duration_since(started_at) >= self.slide_duration {
+                if now.checked_duration_since(started_at).unwrap_or(Duration::ZERO) >= self.slide_duration {
                     SlideState::Open
                 } else {
                     self.slide
                 }
             }
             SlideState::Closing { started_at } => {
-                if now.duration_since(started_at) >= self.slide_duration {
+                if now.checked_duration_since(started_at).unwrap_or(Duration::ZERO) >= self.slide_duration {
                     SlideState::Hidden
                 } else {
                     self.slide
@@ -115,11 +120,11 @@ impl Console {
             SlideState::Hidden => 0.0,
             SlideState::Open => 1.0,
             SlideState::Opening { started_at } => {
-                let elapsed = now.duration_since(started_at);
+                let elapsed = now.checked_duration_since(started_at).unwrap_or(Duration::ZERO);
                 (elapsed.as_secs_f64() / self.slide_duration.as_secs_f64()).min(1.0)
             }
             SlideState::Closing { started_at } => {
-                let elapsed = now.duration_since(started_at);
+                let elapsed = now.checked_duration_since(started_at).unwrap_or(Duration::ZERO);
                 let progress = (elapsed.as_secs_f64() / self.slide_duration.as_secs_f64()).min(1.0);
                 1.0 - progress
             }

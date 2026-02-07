@@ -183,7 +183,8 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
             // Console overlay on top
             if app.console.is_visible() {
                 let fraction = app.console.overlay_fraction(now);
-                render_console(f, f.area(), &app.console, app.tick_counter.tps(), fraction);
+                let show_cursor = app.console.is_open();
+                render_console(f, f.area(), &app.console, app.tick_counter.tps(), fraction, show_cursor);
             }
         })?;
 
