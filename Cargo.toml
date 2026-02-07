@@ -14,3 +14,4 @@ members = [
 [workspace.dependencies]
 crossterm = "0.29"
 ratatui = "0.30"
+unicode-width = "0.2"
