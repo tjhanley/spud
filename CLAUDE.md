@@ -69,10 +69,58 @@ Drop-down console uses `SlideState` enum for time-based slide animation (250ms).
 - PRs must match their linked issue's labels, milestone, and project (`SPUD Roadmap`).
   - Copy labels from the issue (e.g. `phase:2`, `crate:spud-agent`, `type:feature`).
   - Set the same milestone (e.g. `v0.2 — Agent & Rendering`).
-  - After creating the PR, add it to the project board (`gh pr create --project` does **not** work with GitHub Projects v2):
-    ```bash
-    gh project item-add 2 --owner tjhanley --url <PR_URL>
-    ```
+  - After creating the PR, add it to the project board (see **Project Board Integration** below).
+
+## Project Board Integration
+
+`gh pr create --project` and `gh issue create --project` do **not** work with GitHub Projects v2. After creating an issue or PR, you must manually add it and set its fields.
+
+**Step 1 — Add item to project:**
+```bash
+gh project item-add 2 --owner tjhanley --url <ISSUE_OR_PR_URL>
+```
+
+**Step 2 — Get the item ID:**
+```bash
+gh project item-list 2 --owner tjhanley --format json --jq '.items[] | select(.content.number == <NUMBER>) | .id'
+```
+
+**Step 3 — Set the Phase field** (based on the `phase:N` label):
+```bash
+gh project item-edit --project-id PVT_kwHNPBrOAToMfw --id <ITEM_ID> \
+  --field-id PVTSSF_lAHNPBrOAToMf84PTGN5 --single-select-option-id <PHASE_OPTION_ID>
+```
+
+**Step 4 — Set the Status field** to "Todo":
+```bash
+gh project item-edit --project-id PVT_kwHNPBrOAToMfw --id <ITEM_ID> \
+  --field-id PVTSSF_lAHNPBrOAToMf84PTF6l --single-select-option-id f75ad846
+```
+
+### Field IDs reference
+
+| Field | Field ID |
+|-------|----------|
+| Phase | `PVTSSF_lAHNPBrOAToMf84PTGN5` |
+| Status | `PVTSSF_lAHNPBrOAToMf84PTF6l` |
+
+### Phase option IDs
+
+| Phase | Option ID |
+|-------|-----------|
+| Phase 1: Foundation | `949bf2e5` |
+| Phase 2: Agent & Rendering | `7180dd12` |
+| Phase 3: Telemetry | `1d1da87b` |
+| Phase 4: Plugins | `2063ea1b` |
+| Phase 5: Themes | `000eeb20` |
+
+### Status option IDs
+
+| Status | Option ID |
+|--------|-----------|
+| Todo | `f75ad846` |
+| In Progress | `47fc9ee4` |
+| Done | `98236657` |
 
 ## PR Checklist
 
