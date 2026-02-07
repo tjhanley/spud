@@ -193,7 +193,7 @@ fn main() -> Result<()> {
 fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer) -> Result<()> {
     let mut app = App::new(log_buffer)?;
     let tick_interval = Duration::from_millis(100);
-    let poll_timeout = Duration::from_millis(1);
+    let poll_timeout = Duration::from_millis(16);
     let mut last_tick = Instant::now();
 
     loop {
