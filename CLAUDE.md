@@ -69,7 +69,10 @@ Drop-down console uses `SlideState` enum for time-based slide animation (250ms).
 - PRs must match their linked issue's labels, milestone, and project (`SPUD Roadmap`).
   - Copy labels from the issue (e.g. `phase:2`, `crate:spud-agent`, `type:feature`).
   - Set the same milestone (e.g. `v0.2 — Agent & Rendering`).
-  - The project board auto-adds PRs, but verify it shows in `SPUD Roadmap`.
+  - After creating the PR, add it to the project board (`gh pr create --project` does **not** work with GitHub Projects v2):
+    ```bash
+    gh project item-add 2 --owner tjhanley --url <PR_URL>
+    ```
 
 ## PR Checklist
 
