@@ -7,6 +7,7 @@ edition = "2021"
 anyhow = "1"
 crossterm = "0.27"
 ratatui = "0.28"
+tracing = "0.1"
 
 spud-core = { path = "../spud-core" }
 spud-ui = { path = "../spud-ui" }

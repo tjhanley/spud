@@ -8,13 +8,26 @@ use ratatui::{
 
 use crate::layout::DoomRects;
 
+/// Data passed to [`render_shell`] to populate the shell chrome.
+///
+/// The shell view carries the text content for the top bar, HUD panels, and
+/// delegates hero-area rendering to the caller via a closure.
 pub struct ShellView<'a> {
+    /// Title of the active module, shown in the top bar.
     pub module_title: &'a str,
+    /// Status text displayed alongside the module title.
     pub status_line: &'a str,
+    /// Lines rendered in the left HUD column.
     pub hud_left: Vec<String>,
+    /// Lines rendered in the right HUD column.
     pub hud_right: Vec<String>,
 }
 
+/// Render the full Doom-style shell: top bar, hero area, and HUD panels.
+///
+/// The `hero` closure is called to let the active module draw into the hero
+/// rectangle. All other chrome (top bar, HUD left/right, agent face) is
+/// rendered by this function.
 pub fn render_shell(
     f: &mut Frame,
     rects: DoomRects,

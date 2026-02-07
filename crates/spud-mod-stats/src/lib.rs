@@ -7,9 +7,18 @@ use ratatui::{
 
 use spud_core::{event::Event, module::{HudContribution, Module}};
 
+/// System-stats module (stub).
+///
+/// Will eventually display CPU, memory, and SPUD telemetry metrics. Currently
+/// renders placeholder text in the hero area.
 pub struct StatsModule;
 
+impl Default for StatsModule {
+    fn default() -> Self { Self }
+}
+
 impl StatsModule {
+    /// Create a new `StatsModule`.
     pub fn new() -> Self { Self }
 }
 
@@ -25,14 +34,14 @@ impl Module for StatsModule {
             right_lines: vec!["CPU: --%".into(), "RSS: --".into()],
         }
     }
-}
 
-pub fn render_hero(f: &mut Frame, area: Rect) {
-    let p = Paragraph::new(vec![
-        Line::from("Stats module (stub)"),
-        Line::from("Next: sysinfo + SPUD telemetry + gauges/tables"),
-    ])
-    .block(Block::default().borders(Borders::ALL).title("HERO"));
+    fn render_hero(&self, f: &mut Frame, area: Rect) {
+        let p = Paragraph::new(vec![
+            Line::from("Stats module (stub)"),
+            Line::from("Next: sysinfo + SPUD telemetry + gauges/tables"),
+        ])
+        .block(Block::default().borders(Borders::ALL).title("HERO"));
 
-    f.render_widget(p, area);
+        f.render_widget(p, area);
+    }
 }

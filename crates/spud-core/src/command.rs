@@ -1,0 +1,533 @@
+use std::collections::HashMap;
+use std::time::Instant;
+
+use crate::bus::EventBus;
+use crate::console::Console;
+use crate::fps::TickCounter;
+use crate::registry::ModuleRegistry;
+
+/// The result of executing a console command.
+pub enum CommandOutput {
+    /// Lines to display in the console.
+    Lines(Vec<String>),
+    /// Signal that the application should quit.
+    Quit,
+}
+
+/// Shared context passed to every command during execution.
+///
+/// Provides mutable access to the module registry, console, and event bus so
+/// that commands can inspect and modify application state.
+pub struct CommandContext<'a> {
+    /// The module registry (for listing/switching modules).
+    pub registry: &'a mut ModuleRegistry,
+    /// The console state (for clearing logs, etc.).
+    pub console: &'a mut Console,
+    /// The event bus (for publishing lifecycle events).
+    pub bus: &'a mut EventBus,
+    /// The tick counter (for reading TPS).
+    pub tick_counter: &'a TickCounter,
+    /// When the application started (for uptime calculation).
+    pub started_at: Instant,
+}
+
+/// Trait implemented by each console command.
+///
+/// Commands are registered with [`CommandRegistry`] and invoked when the user
+/// types their name (or an alias) in the console input line.
+pub trait Command: Send + Sync {
+    /// The primary name used to invoke this command (e.g. `"help"`).
+    fn name(&self) -> &str;
+    /// Alternative names that also invoke this command (e.g. `["?"]`).
+    fn aliases(&self) -> &[&str] { &[] }
+    /// A one-line description shown in the help listing.
+    fn description(&self) -> &str;
+    /// Usage string shown in help detail (e.g. `"switch <module_id>"`).
+    fn usage(&self) -> &str { self.name() }
+    /// Execute the command with the given arguments and context.
+    fn execute(&self, args: &[&str], ctx: &mut CommandContext) -> CommandOutput;
+}
+
+/// Stores and looks up console commands by name and alias.
+pub struct CommandRegistry {
+    commands: Vec<Box<dyn Command>>,
+    lookup: HashMap<String, usize>,
+}
+
+impl Default for CommandRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl CommandRegistry {
+    /// Create an empty command registry.
+    pub fn new() -> Self {
+        Self {
+            commands: Vec::new(),
+            lookup: HashMap::new(),
+        }
+    }
+
+    /// Register a command, indexing it by its name and all aliases.
+    pub fn register(&mut self, cmd: Box<dyn Command>) {
+        let idx = self.commands.len();
+        self.lookup.insert(cmd.name().to_string(), idx);
+        for alias in cmd.aliases() {
+            self.lookup.insert(alias.to_string(), idx);
+        }
+        self.commands.push(cmd);
+    }
+
+    /// Parse and execute a command string (e.g. `"switch stats"`).
+    ///
+    /// Returns an error message as `Lines` if the command is not found.
+    pub fn execute(&self, input: &str, ctx: &mut CommandContext) -> CommandOutput {
+        let parts: Vec<&str> = input.split_whitespace().collect();
+        if parts.is_empty() {
+            return CommandOutput::Lines(vec![]);
+        }
+
+        let name = parts[0];
+        let args = &parts[1..];
+
+        match self.lookup.get(name) {
+            Some(&idx) => self.commands[idx].execute(args, ctx),
+            None => CommandOutput::Lines(vec![
+                format!("unknown command: '{}'. Type 'help' for available commands.", name),
+            ]),
+        }
+    }
+
+    pub fn commands(&self) -> &[Box<dyn Command>] {
+        &self.commands
+    }
+}
+
+// ── Built-in commands ──
+
+/// Built-in command that lists all registered commands or shows help for a
+/// specific command.
+pub struct HelpCommand;
+
+impl Command for HelpCommand {
+    fn name(&self) -> &str { "help" }
+    fn aliases(&self) -> &[&str] { &["?"] }
+    fn description(&self) -> &str { "List commands or show specific help" }
+    fn usage(&self) -> &str { "help [command]" }
+
+    fn execute(&self, args: &[&str], _ctx: &mut CommandContext) -> CommandOutput {
+        if !args.is_empty() {
+            return CommandOutput::Lines(vec![
+                format!("help for '{}' — use 'help' to list all commands", args[0]),
+            ]);
+        }
+        CommandOutput::Lines(vec!["Type 'help' to list all commands.".into()])
+    }
+}
+
+/// Built-in command that clears all log lines from the console overlay.
+pub struct ClearCommand;
+
+impl Command for ClearCommand {
+    fn name(&self) -> &str { "clear" }
+    fn aliases(&self) -> &[&str] { &["cls"] }
+    fn description(&self) -> &str { "Clear console log" }
+
+    fn execute(&self, _args: &[&str], ctx: &mut CommandContext) -> CommandOutput {
+        ctx.console.clear_logs();
+        CommandOutput::Lines(vec![])
+    }
+}
+
+/// Built-in command that lists all registered modules, marking the active one.
+pub struct ModulesCommand;
+
+impl Command for ModulesCommand {
+    fn name(&self) -> &str { "modules" }
+    fn aliases(&self) -> &[&str] { &["mods"] }
+    fn description(&self) -> &str { "List registered modules" }
+
+    fn execute(&self, _args: &[&str], ctx: &mut CommandContext) -> CommandOutput {
+        let active_id = ctx.registry.active_id().map(|s| s.to_string());
+        let lines: Vec<String> = ctx.registry.list().iter().map(|(id, title)| {
+            let marker = if Some(id.to_string()) == active_id { " *" } else { "" };
+            format!("  {} — {}{}", id, title, marker)
+        }).collect();
+        CommandOutput::Lines(lines)
+    }
+}
+
+/// Built-in command that switches the active module by ID.
+pub struct SwitchCommand;
+
+impl Command for SwitchCommand {
+    fn name(&self) -> &str { "switch" }
+    fn aliases(&self) -> &[&str] { &["sw"] }
+    fn description(&self) -> &str { "Switch active module" }
+    fn usage(&self) -> &str { "switch <module_id>" }
+
+    fn execute(&self, args: &[&str], ctx: &mut CommandContext) -> CommandOutput {
+        if args.is_empty() {
+            return CommandOutput::Lines(vec!["usage: switch <module_id>".into()]);
+        }
+        match ctx.registry.activate(args[0]) {
+            Ok(events) => {
+                for ev in events {
+                    ctx.bus.publish(ev);
+                }
+                let title = ctx.registry.active().map(|m| m.title()).unwrap_or("?");
+                CommandOutput::Lines(vec![format!("Switched to: {}", title)])
+            }
+            Err(e) => CommandOutput::Lines(vec![format!("error: {}", e)]),
+        }
+    }
+}
+
+/// Built-in command that signals the application to exit.
+pub struct QuitCommand;
+
+impl Command for QuitCommand {
+    fn name(&self) -> &str { "quit" }
+    fn aliases(&self) -> &[&str] { &["exit", "q"] }
+    fn description(&self) -> &str { "Exit SPUD" }
+
+    fn execute(&self, _args: &[&str], _ctx: &mut CommandContext) -> CommandOutput {
+        CommandOutput::Quit
+    }
+}
+
+/// Built-in command that displays how long the application has been running.
+pub struct UptimeCommand;
+
+impl Command for UptimeCommand {
+    fn name(&self) -> &str { "uptime" }
+    fn aliases(&self) -> &[&str] { &[] }
+    fn description(&self) -> &str { "Show runtime uptime" }
+
+    fn execute(&self, _args: &[&str], ctx: &mut CommandContext) -> CommandOutput {
+        let elapsed = ctx.started_at.elapsed();
+        let secs = elapsed.as_secs();
+        let hours = secs / 3600;
+        let mins = (secs % 3600) / 60;
+        let s = secs % 60;
+        CommandOutput::Lines(vec![format!("Uptime: {:02}:{:02}:{:02}", hours, mins, s)])
+    }
+}
+
+/// Built-in command that shows the current ticks-per-second rate.
+pub struct TpsCommand;
+
+impl Command for TpsCommand {
+    fn name(&self) -> &str { "tps" }
+    fn aliases(&self) -> &[&str] { &["fps"] }
+    fn description(&self) -> &str { "Show ticks-per-second" }
+
+    fn execute(&self, _args: &[&str], ctx: &mut CommandContext) -> CommandOutput {
+        CommandOutput::Lines(vec![format!("TPS: {:.1}", ctx.tick_counter.tps())])
+    }
+}
+
+/// Built-in command that prints its arguments back to the console.
+pub struct EchoCommand;
+
+impl Command for EchoCommand {
+    fn name(&self) -> &str { "echo" }
+    fn aliases(&self) -> &[&str] { &[] }
+    fn description(&self) -> &str { "Print message to console" }
+    fn usage(&self) -> &str { "echo <message>" }
+
+    fn execute(&self, args: &[&str], _ctx: &mut CommandContext) -> CommandOutput {
+        CommandOutput::Lines(vec![args.join(" ")])
+    }
+}
+
+/// Create a [`CommandRegistry`] pre-loaded with all built-in commands.
+///
+/// Registers: `help`, `clear`, `modules`, `switch`, `quit`, `uptime`, `tps`,
+/// and `echo`.
+pub fn builtin_registry() -> CommandRegistry {
+    let mut reg = CommandRegistry::new();
+    reg.register(Box::new(HelpCommand));
+    reg.register(Box::new(ClearCommand));
+    reg.register(Box::new(ModulesCommand));
+    reg.register(Box::new(SwitchCommand));
+    reg.register(Box::new(QuitCommand));
+    reg.register(Box::new(UptimeCommand));
+    reg.register(Box::new(TpsCommand));
+    reg.register(Box::new(EchoCommand));
+    reg
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bus::EventBus;
+    use crate::console::Console;
+    use crate::event::Event;
+    use crate::fps::TickCounter;
+    use crate::module::Module;
+    use crate::registry::ModuleRegistry;
+
+    struct FakeModule {
+        id: &'static str,
+        title: &'static str,
+    }
+    impl Module for FakeModule {
+        fn id(&self) -> &'static str { self.id }
+        fn title(&self) -> &'static str { self.title }
+    }
+
+    fn make_ctx() -> (ModuleRegistry, Console, EventBus, TickCounter, Instant) {
+        let mut reg = ModuleRegistry::new();
+        reg.register(Box::new(FakeModule { id: "hello", title: "Hello" })).unwrap();
+        reg.register(Box::new(FakeModule { id: "stats", title: "Stats" })).unwrap();
+        (reg, Console::default(), EventBus::new(), TickCounter::default(), Instant::now())
+    }
+
+    fn ctx_from(parts: &mut (ModuleRegistry, Console, EventBus, TickCounter, Instant)) -> CommandContext<'_> {
+        CommandContext {
+            registry: &mut parts.0,
+            console: &mut parts.1,
+            bus: &mut parts.2,
+            tick_counter: &parts.3,
+            started_at: parts.4,
+        }
+    }
+
+    // ── Parsing tests ──
+
+    #[test]
+    fn empty_input_returns_empty() {
+        let reg = builtin_registry();
+        let mut parts = make_ctx();
+        let mut ctx = ctx_from(&mut parts);
+        match reg.execute("", &mut ctx) {
+            CommandOutput::Lines(lines) => assert!(lines.is_empty()),
+            _ => panic!("expected Lines"),
+        }
+    }
+
+    #[test]
+    fn unknown_command_returns_error() {
+        let reg = builtin_registry();
+        let mut parts = make_ctx();
+        let mut ctx = ctx_from(&mut parts);
+        match reg.execute("foobar", &mut ctx) {
+            CommandOutput::Lines(lines) => {
+                assert!(lines[0].contains("unknown command"));
+            }
+            _ => panic!("expected Lines"),
+        }
+    }
+
+    #[test]
+    fn command_name_extraction() {
+        let reg = builtin_registry();
+        let mut parts = make_ctx();
+        let mut ctx = ctx_from(&mut parts);
+        match reg.execute("echo hello world", &mut ctx) {
+            CommandOutput::Lines(lines) => assert_eq!(lines[0], "hello world"),
+            _ => panic!("expected Lines"),
+        }
+    }
+
+    // ── Alias tests ──
+
+    #[test]
+    fn lookup_by_alias() {
+        let reg = builtin_registry();
+        let mut parts = make_ctx();
+        let mut ctx = ctx_from(&mut parts);
+        match reg.execute("?", &mut ctx) {
+            CommandOutput::Lines(_) => {}
+            _ => panic!("expected Lines"),
+        }
+        match reg.execute("cls", &mut ctx) {
+            CommandOutput::Lines(_) => {}
+            _ => panic!("expected Lines"),
+        }
+    }
+
+    // ── Built-in command tests ──
+
+    #[test]
+    fn help_command() {
+        let reg = builtin_registry();
+        let mut parts = make_ctx();
+        let mut ctx = ctx_from(&mut parts);
+        match reg.execute("help", &mut ctx) {
+            CommandOutput::Lines(lines) => assert!(!lines.is_empty()),
+            _ => panic!("expected Lines"),
+        }
+    }
+
+    #[test]
+    fn clear_command_clears_console() {
+        let reg = builtin_registry();
+        let mut parts = make_ctx();
+        parts.1.push_log(crate::logging::LogEntry {
+            level: crate::logging::LogLevel::Info,
+            target: "test".into(),
+            message: "hello".into(),
+        });
+        assert_eq!(parts.1.log_lines().len(), 1);
+        let mut ctx = ctx_from(&mut parts);
+        reg.execute("clear", &mut ctx);
+        assert!(parts.1.log_lines().is_empty());
+    }
+
+    #[test]
+    fn modules_command_lists_modules() {
+        let reg = builtin_registry();
+        let mut parts = make_ctx();
+        let mut ctx = ctx_from(&mut parts);
+        match reg.execute("modules", &mut ctx) {
+            CommandOutput::Lines(lines) => {
+                assert_eq!(lines.len(), 2);
+                assert!(lines[0].contains("hello"));
+                assert!(lines[1].contains("stats"));
+                assert!(lines[0].contains("*"));
+            }
+            _ => panic!("expected Lines"),
+        }
+    }
+
+    #[test]
+    fn switch_command_changes_active() {
+        let reg = builtin_registry();
+        let mut parts = make_ctx();
+        let mut ctx = ctx_from(&mut parts);
+        match reg.execute("switch stats", &mut ctx) {
+            CommandOutput::Lines(lines) => {
+                assert!(lines[0].contains("Stats"));
+            }
+            _ => panic!("expected Lines"),
+        }
+        assert_eq!(parts.0.active_id(), Some("stats"));
+    }
+
+    #[test]
+    fn switch_command_publishes_lifecycle_events() {
+        let reg = builtin_registry();
+        let mut parts = make_ctx();
+        let mut ctx = ctx_from(&mut parts);
+        reg.execute("switch stats", &mut ctx);
+        let events = parts.2.drain();
+        assert_eq!(events.len(), 2);
+        assert!(matches!(&events[0], Event::ModuleDeactivated { id } if id == "hello"));
+        assert!(matches!(&events[1], Event::ModuleActivated { id } if id == "stats"));
+    }
+
+    #[test]
+    fn switch_command_invalid_id() {
+        let reg = builtin_registry();
+        let mut parts = make_ctx();
+        let mut ctx = ctx_from(&mut parts);
+        match reg.execute("switch nope", &mut ctx) {
+            CommandOutput::Lines(lines) => {
+                assert!(lines[0].contains("error"));
+            }
+            _ => panic!("expected Lines"),
+        }
+    }
+
+    #[test]
+    fn switch_command_no_args() {
+        let reg = builtin_registry();
+        let mut parts = make_ctx();
+        let mut ctx = ctx_from(&mut parts);
+        match reg.execute("switch", &mut ctx) {
+            CommandOutput::Lines(lines) => {
+                assert!(lines[0].contains("usage"));
+            }
+            _ => panic!("expected Lines"),
+        }
+    }
+
+    #[test]
+    fn quit_command_signals_quit() {
+        let reg = builtin_registry();
+        let mut parts = make_ctx();
+        let mut ctx = ctx_from(&mut parts);
+        match reg.execute("quit", &mut ctx) {
+            CommandOutput::Quit => {}
+            _ => panic!("expected Quit"),
+        }
+    }
+
+    #[test]
+    fn quit_aliases() {
+        let reg = builtin_registry();
+        let mut parts = make_ctx();
+        let mut ctx = ctx_from(&mut parts);
+        assert!(matches!(reg.execute("exit", &mut ctx), CommandOutput::Quit));
+        let mut ctx = ctx_from(&mut parts);
+        assert!(matches!(reg.execute("q", &mut ctx), CommandOutput::Quit));
+    }
+
+    #[test]
+    fn uptime_command() {
+        let reg = builtin_registry();
+        let mut parts = make_ctx();
+        let mut ctx = ctx_from(&mut parts);
+        match reg.execute("uptime", &mut ctx) {
+            CommandOutput::Lines(lines) => {
+                assert!(lines[0].starts_with("Uptime:"));
+            }
+            _ => panic!("expected Lines"),
+        }
+    }
+
+    #[test]
+    fn tps_command() {
+        let reg = builtin_registry();
+        let mut parts = make_ctx();
+        let mut ctx = ctx_from(&mut parts);
+        match reg.execute("tps", &mut ctx) {
+            CommandOutput::Lines(lines) => {
+                assert!(lines[0].starts_with("TPS:"));
+            }
+            _ => panic!("expected Lines"),
+        }
+    }
+
+    #[test]
+    fn tps_alias_fps() {
+        let reg = builtin_registry();
+        let mut parts = make_ctx();
+        let mut ctx = ctx_from(&mut parts);
+        match reg.execute("fps", &mut ctx) {
+            CommandOutput::Lines(lines) => {
+                assert!(lines[0].starts_with("TPS:"));
+            }
+            _ => panic!("expected Lines"),
+        }
+    }
+
+    #[test]
+    fn echo_command() {
+        let reg = builtin_registry();
+        let mut parts = make_ctx();
+        let mut ctx = ctx_from(&mut parts);
+        match reg.execute("echo hello world", &mut ctx) {
+            CommandOutput::Lines(lines) => {
+                assert_eq!(lines[0], "hello world");
+            }
+            _ => panic!("expected Lines"),
+        }
+    }
+
+    #[test]
+    fn echo_empty() {
+        let reg = builtin_registry();
+        let mut parts = make_ctx();
+        let mut ctx = ctx_from(&mut parts);
+        match reg.execute("echo", &mut ctx) {
+            CommandOutput::Lines(lines) => {
+                assert_eq!(lines[0], "");
+            }
+            _ => panic!("expected Lines"),
+        }
+    }
+}
