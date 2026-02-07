@@ -1,3 +1,5 @@
+use std::any::Any;
+use std::collections::HashMap;
 use std::io::{self, Stdout};
 use std::time::{Duration, Instant};
 
@@ -7,7 +9,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     event::{self, Event as CEvent, KeyCode},
 };
-use ratatui::{Terminal, backend::CrosstermBackend};
+use ratatui::{Frame, Terminal, backend::CrosstermBackend, layout::Rect};
 
 use spud_core::{
     bus::EventBus,
@@ -16,17 +18,23 @@ use spud_core::{
     event::Event,
     fps::TickCounter,
     logging::{self, LogBuffer, LogEntry, LogLevel},
+    module::Module,
     state::AppState,
     registry::ModuleRegistry,
 };
 use spud_ui::{
     console::render_console,
     layout::doom_layout,
+    renderer::HeroRenderer,
     shell::{render_shell, ShellView},
 };
 
 use spud_mod_hello::HelloModule;
 use spud_mod_stats::StatsModule;
+
+/// A type-erased render function that downcasts a module via `Any` and draws
+/// its hero area.
+type RenderFn = Box<dyn Fn(&dyn Any, &mut Frame, Rect)>;
 
 struct App {
     state: AppState,
@@ -36,13 +44,35 @@ struct App {
     console: Console,
     tick_counter: TickCounter,
     commands: CommandRegistry,
+    render_map: HashMap<String, RenderFn>,
+}
+
+/// Register a module that also implements `HeroRenderer`.
+///
+/// Inserts the module into the registry and captures a type-aware render
+/// closure in `render_map` so the app can call `render_hero` without
+/// knowing the concrete module type.
+fn register_module<M: Module + HeroRenderer + 'static>(
+    registry: &mut ModuleRegistry,
+    render_map: &mut HashMap<String, RenderFn>,
+    module: M,
+) -> Result<()> {
+    let id = module.id().to_string();
+    render_map.insert(id, Box::new(|any, f, area| {
+        if let Some(m) = any.downcast_ref::<M>() {
+            m.render_hero(f, area);
+        }
+    }));
+    registry.register(Box::new(module))
 }
 
 impl App {
     fn new(log_buffer: LogBuffer) -> Result<Self> {
         let mut registry = ModuleRegistry::new();
-        registry.register(Box::new(HelloModule::new()))?;
-        registry.register(Box::new(StatsModule::new()))?;
+        let mut render_map: HashMap<String, RenderFn> =
+            HashMap::new();
+        register_module(&mut registry, &mut render_map, HelloModule::new())?;
+        register_module(&mut registry, &mut render_map, StatsModule::new())?;
         Ok(Self {
             state: AppState::new(),
             registry,
@@ -51,6 +81,7 @@ impl App {
             console: Console::default(),
             tick_counter: TickCounter::default(),
             commands: command::builtin_registry(),
+            render_map,
         })
     }
 
@@ -173,9 +204,12 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
                     hud_right: hud.right_lines,
                 };
 
+                let render_map = &app.render_map;
                 render_shell(f, rects, view, |f, hero_area| {
                     if let Some(m) = app.registry.active() {
-                        m.render_hero(f, hero_area);
+                        if let Some(render_fn) = render_map.get(m.id()) {
+                            render_fn(m.as_any(), f, hero_area);
+                        }
                     }
                 });
             }

@@ -29,7 +29,7 @@ Rust workspace (`edition = "2021"`, `resolver = "2"`). Eight crates under `crate
 
 ### Module System
 
-Modules implement `spud_core::module::Module` (id, title, handle_event, hud, render_hero). Registered in `App::new()` via `registry.register(Box::new(MyModule::new()))`. First registered module auto-activates.
+Modules implement `spud_core::module::Module` (id, title, handle_event, hud, as_any). Rendering lives in `spud_ui::renderer::HeroRenderer` — modules that render hero content implement both traits. Registered in `App::new()` via `register_module(registry, render_map, MyModule::new())`, which captures a type-aware render closure using `as_any()` downcasting. First registered module auto-activates.
 
 ### Event Flow
 

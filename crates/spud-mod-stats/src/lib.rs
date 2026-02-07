@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use ratatui::{
     Frame,
     layout::Rect,
@@ -6,6 +8,7 @@ use ratatui::{
 };
 
 use spud_core::{event::Event, module::{HudContribution, Module}};
+use spud_ui::renderer::HeroRenderer;
 
 /// System-stats module (stub).
 ///
@@ -35,6 +38,10 @@ impl Module for StatsModule {
         }
     }
 
+    fn as_any(&self) -> &dyn Any { self }
+}
+
+impl HeroRenderer for StatsModule {
     fn render_hero(&self, f: &mut Frame, area: Rect) {
         let p = Paragraph::new(vec![
             Line::from("Stats module (stub)"),

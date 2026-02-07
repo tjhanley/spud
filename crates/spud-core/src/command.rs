@@ -276,6 +276,7 @@ mod tests {
     impl Module for FakeModule {
         fn id(&self) -> &'static str { self.id }
         fn title(&self) -> &'static str { self.title }
+        fn as_any(&self) -> &dyn std::any::Any { self }
     }
 
     fn make_ctx() -> (ModuleRegistry, Console, EventBus, TickCounter, Instant) {

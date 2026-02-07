@@ -667,7 +667,6 @@ dependencies = [
  "anyhow",
  "crossterm 0.27.0",
  "dirs",
- "ratatui",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
@@ -679,6 +678,7 @@ version = "0.1.0"
 dependencies = [
  "ratatui",
  "spud-core",
+ "spud-ui",
 ]
 
 [[package]]
@@ -687,6 +687,7 @@ version = "0.1.0"
 dependencies = [
  "ratatui",
  "spud-core",
+ "spud-ui",
 ]
 
 [[package]]

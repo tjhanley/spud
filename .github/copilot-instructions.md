@@ -28,13 +28,28 @@ pub trait Module {
     fn title(&self) -> &'static str;
     fn handle_event(&mut self, _ev: &Event) {}
     fn hud(&self) -> HudContribution { HudContribution::default() }
-    fn render_hero(&self, _f: &mut Frame, _area: Rect) {}
+    fn as_any(&self) -> &dyn Any;
 }
 ```
 
 - Use `&'static str` for id and title
 - Provide default no-op implementations for optional methods
-- Modules register via `ModuleRegistry::register(Box<dyn Module>)`
+- `as_any()` has no default — the compiler enforces it on all implementors
+- Modules register via `register_module(registry, render_map, MyModule::new())`
+
+### HeroRenderer Trait
+
+Modules that render hero content also implement `spud_ui::renderer::HeroRenderer`:
+
+```rust
+pub trait HeroRenderer {
+    fn render_hero(&self, f: &mut Frame, area: Rect);
+}
+```
+
+- `spud-core` has no `ratatui` dependency — rendering types live in `spud-ui`
+- The app captures type-aware render closures at registration time via `as_any()` downcasting
+- Modules that don't render can skip `spud-ui` entirely
 
 ### Event Bus
 

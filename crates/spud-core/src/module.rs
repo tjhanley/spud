@@ -1,4 +1,4 @@
-use ratatui::{Frame, layout::Rect};
+use std::any::Any;
 
 use crate::event::Event;
 
@@ -15,8 +15,11 @@ pub struct HudContribution {
 ///
 /// Modules are the primary extension point for SPUD. Each module provides a
 /// unique [`id`](Module::id), a human-readable [`title`](Module::title), and
-/// optional implementations for event handling, HUD contributions, and hero-area
-/// rendering.
+/// optional implementations for event handling and HUD contributions.
+///
+/// Rendering is handled separately via `spud_ui::renderer::HeroRenderer`.
+/// Modules that render hero content should implement that trait in addition
+/// to `Module`.
 ///
 /// Modules are registered with [`crate::registry::ModuleRegistry`] and receive
 /// events via [`handle_event`](Module::handle_event).
@@ -39,9 +42,7 @@ pub trait Module {
         HudContribution::default()
     }
 
-    /// Render the hero (main content) area of the screen.
-    ///
-    /// Called each frame when this module is active. The default implementation
-    /// is a no-op, leaving the hero area blank.
-    fn render_hero(&self, _f: &mut Frame, _area: Rect) {}
+    /// Return `self` as `&dyn Any` to enable downcasting for type-aware
+    /// rendering in spud-ui.
+    fn as_any(&self) -> &dyn Any;
 }

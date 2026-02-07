@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use ratatui::{
     Frame,
     layout::{Alignment, Rect},
@@ -6,6 +8,7 @@ use ratatui::{
 };
 
 use spud_core::{event::Event, module::{HudContribution, Module}};
+use spud_ui::renderer::HeroRenderer;
 
 /// A minimal welcome-screen module.
 ///
@@ -42,6 +45,10 @@ impl Module for HelloModule {
         }
     }
 
+    fn as_any(&self) -> &dyn Any { self }
+}
+
+impl HeroRenderer for HelloModule {
     fn render_hero(&self, f: &mut Frame, area: Rect) {
         let p = Paragraph::new(vec![
             Line::from("SPUD"),
