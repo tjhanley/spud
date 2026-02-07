@@ -156,6 +156,10 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
         // ── Sync logs from tracing into console ──
         app.sync_logs();
 
+        // ── Update animation state ──
+        let now = Instant::now();
+        app.console.update(now);
+
         // ── Render ──
         terminal.draw(|f| {
             let rects = doom_layout(f.area(), 9, 18);
@@ -177,8 +181,10 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
             }
 
             // Console overlay on top
-            if app.console.visible {
-                render_console(f, f.area(), &app.console, app.tick_counter.tps());
+            if app.console.is_visible() {
+                let fraction = app.console.overlay_fraction(now);
+                let show_cursor = app.console.is_open();
+                render_console(f, f.area(), &app.console, app.tick_counter.tps(), fraction, show_cursor);
             }
         })?;
 
@@ -189,9 +195,9 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
                 CEvent::Key(key) => {
                     // Tilde always toggles the console
                     if key.code == KeyCode::Char('`') || key.code == KeyCode::Char('~') {
-                        app.console.toggle();
-                    } else if app.console.visible {
-                        // Console captures all keys when open
+                        app.console.toggle(Instant::now());
+                    } else if app.console.is_open() {
+                        // Console captures all keys when fully open
                         match key.code {
                             KeyCode::Enter => {
                                 let input = app.console.submit_input();
@@ -204,7 +210,7 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
                             KeyCode::Right => app.console.cursor_right(),
                             KeyCode::PageUp => app.console.scroll_up(10),
                             KeyCode::PageDown => app.console.scroll_down(10),
-                            KeyCode::Esc => app.console.toggle(),
+                            KeyCode::Esc => app.console.toggle(Instant::now()),
                             KeyCode::Char(c) => app.console.insert_char(c),
                             _ => {}
                         }
