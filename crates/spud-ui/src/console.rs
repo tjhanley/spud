@@ -147,6 +147,9 @@ pub fn render_console(
             .map(|s| s.width())
             .unwrap_or(0);
         let max_col = chunks[2].width.saturating_sub(2) as usize;
-        f.set_cursor_position((chunks[2].x + 2 + display_col.min(max_col) as u16, chunks[2].y));
+        f.set_cursor_position((
+            chunks[2].x + 2 + display_col.min(max_col) as u16,
+            chunks[2].y,
+        ));
     }
 }
