@@ -1312,6 +1312,7 @@ dependencies = [
  "anyhow",
  "crossterm",
  "ratatui",
+ "spud-agent",
  "spud-core",
  "spud-mod-hello",
  "spud-mod-stats",
