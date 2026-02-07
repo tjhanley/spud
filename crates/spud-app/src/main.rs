@@ -26,7 +26,7 @@ use spud_ui::{
     console::render_console,
     layout::doom_layout,
     renderer::HeroRenderer,
-    shell::{render_shell, ShellView},
+    shell::{render_shell, FaceFrame, ShellView},
 };
 
 use spud_mod_hello::HelloModule;
@@ -45,6 +45,7 @@ struct App {
     tick_counter: TickCounter,
     commands: CommandRegistry,
     render_map: HashMap<String, RenderFn>,
+    agent: spud_agent::Agent,
 }
 
 /// Register a module that also implements `HeroRenderer`.
@@ -75,6 +76,7 @@ impl App {
         let mut render_map: HashMap<String, RenderFn> = HashMap::new();
         register_module(&mut registry, &mut render_map, HelloModule::new())?;
         register_module(&mut registry, &mut render_map, StatsModule::new())?;
+        let agent = spud_agent::Agent::load_default(Instant::now())?;
         Ok(Self {
             state: AppState::new(),
             registry,
@@ -84,6 +86,7 @@ impl App {
             tick_counter: TickCounter::default(),
             commands: command::builtin_registry(),
             render_map,
+            agent,
         })
     }
 
@@ -203,11 +206,13 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
         // ── Update animation state ──
         let now = Instant::now();
         app.console.update(now);
+        app.agent.tick(now);
 
         // ── Render ──
         terminal.draw(|f| {
             let rects = doom_layout(f.area(), 9, 18);
 
+            let face = app.agent.current_frame();
             if let Some(m) = app.registry.active() {
                 let hud = m.hud();
                 let view = ShellView {
@@ -215,6 +220,11 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
                     status_line: &app.state.status_line,
                     hud_left: hud.left_lines,
                     hud_right: hud.right_lines,
+                    face: Some(FaceFrame {
+                        data: &face.data,
+                        width: face.width,
+                        height: face.height,
+                    }),
                 };
 
                 let render_map = &app.render_map;

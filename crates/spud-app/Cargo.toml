@@ -9,6 +9,7 @@ crossterm = { workspace = true }
 ratatui = { workspace = true }
 tracing = "0.1"
 
+spud-agent = { path = "../spud-agent" }
 spud-core = { path = "../spud-core" }
 spud-ui = { path = "../spud-ui" }
 spud-mod-hello = { path = "../spud-mod-hello" }
