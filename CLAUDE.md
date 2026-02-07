@@ -66,10 +66,16 @@ Drop-down console uses `SlideState` enum for time-based slide animation (250ms).
 - Always create a feature branch before making changes — never commit directly to `main`.
 - Branch naming: `tjh/<issue-number>-<feature-name>` (e.g. `tjh/19-remove-ratatui-from-core`).
 - Push the feature branch and open a PR linked to the issue.
+- PRs must match their linked issue's labels, milestone, and project (`SPUD Roadmap`).
+  - Copy labels from the issue (e.g. `phase:2`, `crate:spud-agent`, `type:feature`).
+  - Set the same milestone (e.g. `v0.2 — Agent & Rendering`).
+  - The project board auto-adds PRs, but verify it shows in `SPUD Roadmap`.
 
 ## PR Checklist
 
+- `cargo fmt --all -- --check` passes
 - `cargo test --workspace` passes
 - `cargo clippy --workspace` is clean
 - New public APIs have doc comments
 - New modules registered in `spud-app/src/main.rs`
+- Labels, milestone, and project match the linked issue
