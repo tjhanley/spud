@@ -42,13 +42,14 @@ impl MoodEngine {
     }
 
     /// Advance the animation clock. Moves to the next frame when
-    /// [`frame_interval`](Self::frame_interval) has elapsed.
+    /// [`frame_interval`](Self::frame_interval) has elapsed. Catches up
+    /// if multiple intervals have passed since the last tick.
     pub fn tick(&mut self, now: Instant) {
-        let elapsed = now.checked_duration_since(self.last_advance);
-        if let Some(dt) = elapsed {
-            if dt >= self.frame_interval {
+        if let Some(mut dt) = now.checked_duration_since(self.last_advance) {
+            while dt >= self.frame_interval {
                 self.frame_index = (self.frame_index + 1) % self.pack.frames_per_mood;
-                self.last_advance = now;
+                self.last_advance += self.frame_interval;
+                dt -= self.frame_interval;
             }
         }
     }
@@ -175,5 +176,15 @@ mod tests {
         // Tick at exactly the interval
         engine.tick(now + Duration::from_millis(300));
         assert_eq!(engine.current_frame().data[0], 1); // frame 1
+    }
+
+    #[test]
+    fn tick_catches_up_on_long_gap() {
+        let now = Instant::now();
+        let mut engine = MoodEngine::new(test_pack(3), now);
+
+        // Skip 750ms in one tick — should advance 2 frames (600ms worth), not just 1
+        engine.tick(now + Duration::from_millis(750));
+        assert_eq!(engine.current_frame().data[0], 2); // frame 2, not 1
     }
 }

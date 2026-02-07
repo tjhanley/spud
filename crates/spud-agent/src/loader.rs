@@ -85,11 +85,17 @@ fn parse_mood_map(meta: &FacePackMeta) -> Result<[usize; Mood::COUNT]> {
     ];
 
     for &(name, mood) in name_to_mood {
-        let row = meta
+        let row = *meta
             .moods
             .get(name)
             .with_context(|| format!("missing mood \"{name}\" in face pack metadata"))?;
-        map[mood as usize] = *row;
+        if row >= Mood::COUNT {
+            bail!(
+                "mood \"{name}\" mapped to row {row}, but sheet only has {} rows",
+                Mood::COUNT,
+            );
+        }
+        map[mood as usize] = row;
     }
 
     Ok(map)
@@ -141,6 +147,19 @@ mod tests {
         let map = parse_mood_map(&meta).unwrap();
         assert_eq!(map[Mood::Neutral as usize], 5);
         assert_eq!(map[Mood::Thinking as usize], 0);
+    }
+
+    #[test]
+    fn parse_mood_map_row_out_of_bounds() {
+        let mut moods = all_moods();
+        // Set god_mode to row 99 — out of bounds
+        moods.iter_mut().find(|(k, _)| *k == "god_mode").unwrap().1 = 99;
+        let meta = make_meta(&moods);
+        let err = parse_mood_map(&meta).unwrap_err();
+        assert!(
+            err.to_string().contains("row 99"),
+            "error should mention the invalid row: {err}"
+        );
     }
 
     #[test]
