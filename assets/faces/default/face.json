@@ -1,0 +1,12 @@
+{
+  "sprite_size": [128, 128],
+  "frames_per_mood": 7,
+  "moods": {
+    "neutral": 0,
+    "happy": 1,
+    "angry": 2,
+    "god_mode": 3,
+    "hurt_real_bad": 4,
+    "thinking": 5
+  }
+}
