@@ -222,6 +222,7 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
     let tick_interval = Duration::from_millis(100);
     let poll_timeout = Duration::from_millis(16);
     let mut last_tick = Instant::now();
+    let mut should_quit = false;
 
     loop {
         // ── Sync logs from tracing into console ──
@@ -287,13 +288,13 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
         })?;
 
         // ── Post-draw: iTerm2 inline image rendering ──
-        if app.graphics_backend == GraphicsBackend::ITerm2 {
+        // Skip iTerm2 rendering if we're about to quit (avoids slow flush on exit)
+        if app.graphics_backend == GraphicsBackend::ITerm2 && !should_quit {
             use ratatui::widgets::Block;
             let inner = Block::default()
                 .borders(ratatui::widgets::Borders::ALL)
                 .inner(rects.hud_face);
             // Pass reference to face.data - pointer stays stable until frame actually changes
-            tracing::trace!("Rendering iTerm2 face image");
             iterm::render_iterm_face(
                 terminal.backend_mut(),
                 inner,
@@ -301,9 +302,7 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
                 face.width,
                 face.height,
             )?;
-            tracing::trace!("Flushing terminal backend");
             terminal.backend_mut().flush()?;
-            tracing::trace!("iTerm2 render complete");
         }
 
         // ── Poll → Publish ──
@@ -335,9 +334,9 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
                         // Normal mode
                         match key.code {
                             KeyCode::Char('q') => {
-                                // Exit immediately on quit key
-                                tracing::info!("Quit key pressed, exiting immediately");
-                                return Ok(());
+                                tracing::info!("Quit key pressed");
+                                app.bus.publish(Event::Quit);
+                                should_quit = true;
                             }
                             KeyCode::Tab => {
                                 let lifecycle = app.registry.cycle_next();
@@ -371,9 +370,17 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
         let events = app.bus.drain();
         for ev in &events {
             if matches!(ev, Event::Quit) {
+                tracing::info!("Processing Quit event");
+                app.registry.broadcast(ev);
                 return Ok(());
             }
             app.registry.broadcast(ev);
+        }
+
+        // If quit flag is set, exit immediately after this iteration
+        if should_quit {
+            tracing::info!("Quit flag set, exiting");
+            return Ok(());
         }
     }
 }
