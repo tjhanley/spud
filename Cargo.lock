@@ -1417,6 +1417,7 @@ version = "0.1.0"
 name = "spud-ui"
 version = "0.1.0"
 dependencies = [
+ "image",
  "ratatui",
  "spud-core",
  "unicode-width",

@@ -1,6 +1,6 @@
 use std::any::Any;
 use std::collections::HashMap;
-use std::io::{self, Stdout};
+use std::io::{self, Write, Stdout};
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
@@ -24,6 +24,8 @@ use spud_core::{
 };
 use spud_ui::{
     console::render_console,
+    graphics::{detect_backend, GraphicsBackend},
+    iterm,
     layout::doom_layout,
     renderer::HeroRenderer,
     shell::{render_shell, FaceFrame, ShellView},
@@ -46,6 +48,7 @@ struct App {
     commands: CommandRegistry,
     render_map: HashMap<String, RenderFn>,
     agent: spud_agent::Agent,
+    graphics_backend: GraphicsBackend,
 }
 
 /// Register a module that also implements `HeroRenderer`.
@@ -77,6 +80,8 @@ impl App {
         register_module(&mut registry, &mut render_map, HelloModule::new())?;
         register_module(&mut registry, &mut render_map, StatsModule::new())?;
         let agent = spud_agent::Agent::load_default(Instant::now())?;
+        let graphics_backend = detect_backend();
+        tracing::info!("Graphics backend: {:?}", graphics_backend);
         Ok(Self {
             state: AppState::new(),
             registry,
@@ -87,6 +92,7 @@ impl App {
             commands: command::builtin_registry(),
             render_map,
             agent,
+            graphics_backend,
         })
     }
 
@@ -208,11 +214,20 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
         app.console.update(now);
         app.agent.tick(now);
 
+        // ── Compute layout before drawing (needed for post-draw iTerm2 rendering) ──
+        let terminal_size = terminal.size()?;
+        let rects = doom_layout(
+            Rect::new(0, 0, terminal_size.width, terminal_size.height),
+            9,
+            18,
+        );
+
+        // Keep face data alive for both draw and post-draw phases
+        // (avoids cloning 60 times/sec, which breaks the pointer-based cache)
+        let face = app.agent.current_frame();
+
         // ── Render ──
         terminal.draw(|f| {
-            let rects = doom_layout(f.area(), 9, 18);
-
-            let face = app.agent.current_frame();
             if let Some(m) = app.registry.active() {
                 let hud = m.hud();
                 let view = ShellView {
@@ -225,6 +240,7 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
                         width: face.width,
                         height: face.height,
                     }),
+                    graphics_backend: app.graphics_backend,
                 };
 
                 let render_map = &app.render_map;
@@ -251,6 +267,17 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
                 );
             }
         })?;
+
+        // ── Post-draw: iTerm2 inline image rendering ──
+        if app.graphics_backend == GraphicsBackend::ITerm2 {
+            use ratatui::widgets::Block;
+            let inner = Block::default()
+                .borders(ratatui::widgets::Borders::ALL)
+                .inner(rects.hud_face);
+            // Pass reference to face.data - pointer stays stable until frame actually changes
+            iterm::render_iterm_face(terminal.backend_mut(), inner, &face.data, face.width, face.height)?;
+            terminal.backend_mut().flush()?;
+        }
 
         // ── Poll → Publish ──
         if event::poll(poll_timeout)? {
