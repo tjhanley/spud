@@ -314,7 +314,8 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
                         // Normal mode
                         match key.code {
                             KeyCode::Char('q') => {
-                                app.bus.publish(Event::Quit);
+                                // Exit immediately on quit key
+                                return Ok(());
                             }
                             KeyCode::Tab => {
                                 let lifecycle = app.registry.cycle_next();
