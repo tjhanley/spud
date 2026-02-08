@@ -1,6 +1,6 @@
 use std::any::Any;
 use std::collections::HashMap;
-use std::io::{self, Write, Stdout};
+use std::io::{self, Stdout, Write};
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
@@ -275,7 +275,13 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
                 .borders(ratatui::widgets::Borders::ALL)
                 .inner(rects.hud_face);
             // Pass reference to face.data - pointer stays stable until frame actually changes
-            iterm::render_iterm_face(terminal.backend_mut(), inner, &face.data, face.width, face.height)?;
+            iterm::render_iterm_face(
+                terminal.backend_mut(),
+                inner,
+                &face.data,
+                face.width,
+                face.height,
+            )?;
             terminal.backend_mut().flush()?;
         }
 
