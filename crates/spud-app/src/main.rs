@@ -75,13 +75,22 @@ fn register_module<M: Module + HeroRenderer + 'static>(
 
 impl App {
     fn new(log_buffer: LogBuffer) -> Result<Self> {
+        tracing::info!("App::new() - Creating module registry");
         let mut registry = ModuleRegistry::new();
         let mut render_map: HashMap<String, RenderFn> = HashMap::new();
+
+        tracing::info!("App::new() - Registering modules");
         register_module(&mut registry, &mut render_map, HelloModule::new())?;
         register_module(&mut registry, &mut render_map, StatsModule::new())?;
+
+        tracing::info!("App::new() - Loading agent");
         let agent = spud_agent::Agent::load_default(Instant::now())?;
+
+        tracing::info!("App::new() - Detecting graphics backend");
         let graphics_backend = detect_backend();
         tracing::info!("Graphics backend: {:?}", graphics_backend);
+
+        tracing::info!("App::new() - Complete");
         Ok(Self {
             state: AppState::new(),
             registry,
@@ -193,9 +202,18 @@ fn main() -> Result<()> {
     let log_buffer = logging::init();
     tracing::info!("SPUD starting up");
 
+    tracing::info!("Setting up terminal");
     let mut terminal = setup_terminal()?;
+    tracing::info!("Terminal setup complete");
+
+    tracing::info!("Starting main loop");
     let res = run(&mut terminal, log_buffer);
+    tracing::info!("Main loop exited");
+
+    tracing::info!("Restoring terminal");
     restore_terminal(terminal)?;
+    tracing::info!("Terminal restored");
+
     res
 }
 
@@ -275,6 +293,7 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
                 .borders(ratatui::widgets::Borders::ALL)
                 .inner(rects.hud_face);
             // Pass reference to face.data - pointer stays stable until frame actually changes
+            tracing::trace!("Rendering iTerm2 face image");
             iterm::render_iterm_face(
                 terminal.backend_mut(),
                 inner,
@@ -282,7 +301,9 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
                 face.width,
                 face.height,
             )?;
+            tracing::trace!("Flushing terminal backend");
             terminal.backend_mut().flush()?;
+            tracing::trace!("iTerm2 render complete");
         }
 
         // ── Poll → Publish ──
@@ -315,6 +336,7 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
                         match key.code {
                             KeyCode::Char('q') => {
                                 // Exit immediately on quit key
+                                tracing::info!("Quit key pressed, exiting immediately");
                                 return Ok(());
                             }
                             KeyCode::Tab => {
