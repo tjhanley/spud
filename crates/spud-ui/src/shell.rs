@@ -2,7 +2,7 @@ use ratatui::{
     layout::Rect,
     style::Style,
     text::{Line, Text},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
 
@@ -76,22 +76,17 @@ pub fn render_shell(
     // Face rendering depends on graphics backend
     match view.graphics_backend {
         GraphicsBackend::ITerm2 => {
-            // For iTerm2, we just draw the border and fill with spaces.
+            // For iTerm2, we just draw the border and clear the inner area.
             // The actual image will be written post-draw via terminal.backend_mut().
             let face_block = Block::default().borders(Borders::ALL).title("AGENT");
             let inner = face_block.inner(rects.hud_face);
             f.render_widget(face_block, rects.hud_face);
 
-            // Fill inner area with spaces to give ratatui stable content
-            // (prevents the diff algorithm from overwriting our image)
+            // Clear inner area to give ratatui stable content (prevents the diff
+            // algorithm from overwriting our image). Clear is more efficient than
+            // manually filling with spaces.
             if view.face.is_some() {
-                let space_line = " ".repeat(inner.width as usize);
-                let space_text = Text::from(
-                    (0..inner.height)
-                        .map(|_| Line::from(space_line.clone()))
-                        .collect::<Vec<_>>(),
-                );
-                f.render_widget(Paragraph::new(space_text), inner);
+                f.render_widget(Clear, inner);
             }
         }
         GraphicsBackend::UnicodeBlock => {

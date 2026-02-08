@@ -25,6 +25,10 @@ use ratatui::layout::Rect;
 struct ImageCache {
     /// Pointer to the source RGBA data (used as cache key).
     last_data_ptr: usize,
+    /// Cached image width (part of cache key).
+    last_width: u32,
+    /// Cached image height (part of cache key).
+    last_height: u32,
     /// Pre-encoded base64 PNG string.
     last_encoded: String,
 }
@@ -33,6 +37,8 @@ impl ImageCache {
     fn new() -> Self {
         Self {
             last_data_ptr: 0,
+            last_width: 0,
+            last_height: 0,
             last_encoded: String::new(),
         }
     }
@@ -41,8 +47,12 @@ impl ImageCache {
     fn get_or_encode(&mut self, data: &[u8], width: u32, height: u32) -> io::Result<String> {
         let data_ptr = data.as_ptr() as usize;
 
-        // Cache hit: same data pointer means same frame
-        if data_ptr == self.last_data_ptr && !self.last_encoded.is_empty() {
+        // Cache hit: same data pointer AND dimensions means same frame
+        if data_ptr == self.last_data_ptr
+            && width == self.last_width
+            && height == self.last_height
+            && !self.last_encoded.is_empty()
+        {
             return Ok(self.last_encoded.clone());
         }
 
@@ -57,6 +67,8 @@ impl ImageCache {
 
         self.last_encoded = base64_encode(&png_bytes);
         self.last_data_ptr = data_ptr;
+        self.last_width = width;
+        self.last_height = height;
 
         Ok(self.last_encoded.clone())
     }

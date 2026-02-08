@@ -40,9 +40,15 @@ pub fn detect_backend() -> GraphicsBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    // Serialize access to process-global env vars to prevent test races
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn detect_backend_default_returns_unicode_block() {
+        let _guard = ENV_LOCK.lock().unwrap();
+
         // Save original values
         let original_graphics = std::env::var("SPUD_GRAPHICS").ok();
         let original_term_program = std::env::var("TERM_PROGRAM").ok();
@@ -64,6 +70,8 @@ mod tests {
 
     #[test]
     fn detect_backend_respects_spud_graphics_iterm2_override() {
+        let _guard = ENV_LOCK.lock().unwrap();
+
         let original = std::env::var("SPUD_GRAPHICS").ok();
 
         std::env::set_var("SPUD_GRAPHICS", "iterm2");
@@ -78,6 +86,8 @@ mod tests {
 
     #[test]
     fn detect_backend_respects_spud_graphics_unicode_override() {
+        let _guard = ENV_LOCK.lock().unwrap();
+
         let original = std::env::var("SPUD_GRAPHICS").ok();
 
         std::env::set_var("SPUD_GRAPHICS", "unicode");
@@ -92,6 +102,8 @@ mod tests {
 
     #[test]
     fn detect_backend_detects_iterm_app() {
+        let _guard = ENV_LOCK.lock().unwrap();
+
         let original_graphics = std::env::var("SPUD_GRAPHICS").ok();
         let original_term_program = std::env::var("TERM_PROGRAM").ok();
 
@@ -112,6 +124,8 @@ mod tests {
 
     #[test]
     fn detect_backend_detects_wezterm() {
+        let _guard = ENV_LOCK.lock().unwrap();
+
         let original_graphics = std::env::var("SPUD_GRAPHICS").ok();
         let original_term_program = std::env::var("TERM_PROGRAM").ok();
 
