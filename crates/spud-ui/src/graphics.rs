@@ -16,25 +16,38 @@ pub enum GraphicsBackend {
 
 /// Detect the best available graphics backend.
 ///
-/// Checks `SPUD_GRAPHICS` env var for explicit override (`iterm2` or `unicode`),
-/// then falls back to `TERM_PROGRAM` detection for iTerm.app and WezTerm.
+/// Checks `SPUD_GRAPHICS` env var for explicit override (`sixel` or `unicode`),
+/// then falls back to detecting Sixel support via TERM or TERM_PROGRAM.
 /// Returns [`GraphicsBackend::UnicodeBlock`] as the safe default.
 pub fn detect_backend() -> GraphicsBackend {
-    // Env override: SPUD_GRAPHICS=iterm2|unicode
+    // Env override: SPUD_GRAPHICS=sixel|unicode
     if let Ok(val) = std::env::var("SPUD_GRAPHICS") {
         match val.to_lowercase().as_str() {
-            "iterm2" => return GraphicsBackend::ITerm2,
+            "sixel" => return GraphicsBackend::Sixel,
             "unicode" => return GraphicsBackend::UnicodeBlock,
             _ => {} // Invalid value, fall through to auto-detection
         }
     }
 
-    // Auto-detect from TERM_PROGRAM
-    match std::env::var("TERM_PROGRAM").as_deref() {
-        Ok("iTerm.app") => GraphicsBackend::ITerm2,
-        Ok("WezTerm") => GraphicsBackend::ITerm2, // WezTerm supports iTerm2 protocol
-        _ => GraphicsBackend::UnicodeBlock,
+    // Check for Sixel support via TERM_PROGRAM
+    if let Ok(term_program) = std::env::var("TERM_PROGRAM") {
+        match term_program.as_str() {
+            "WezTerm" => return GraphicsBackend::Sixel,
+            "mlterm" => return GraphicsBackend::Sixel,
+            _ => {}
+        }
     }
+
+    // Check for Sixel support via TERM variable
+    if let Ok(term) = std::env::var("TERM") {
+        // XTerm and terminals that advertise Sixel support
+        if term.contains("xterm") || term.contains("mlterm") || term == "foot" {
+            return GraphicsBackend::Sixel;
+        }
+    }
+
+    // Safe default: Unicode blocks work everywhere
+    GraphicsBackend::UnicodeBlock
 }
 
 #[cfg(test)]
@@ -47,15 +60,17 @@ mod tests {
 
     #[test]
     fn detect_backend_default_returns_unicode_block() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
         // Save original values
         let original_graphics = std::env::var("SPUD_GRAPHICS").ok();
         let original_term_program = std::env::var("TERM_PROGRAM").ok();
+        let original_term = std::env::var("TERM").ok();
 
-        // Clear both env vars to test default
+        // Clear all env vars to test default
         std::env::remove_var("SPUD_GRAPHICS");
         std::env::remove_var("TERM_PROGRAM");
+        std::env::remove_var("TERM");
 
         assert_eq!(detect_backend(), GraphicsBackend::UnicodeBlock);
 
@@ -66,16 +81,19 @@ mod tests {
         if let Some(val) = original_term_program {
             std::env::set_var("TERM_PROGRAM", val);
         }
+        if let Some(val) = original_term {
+            std::env::set_var("TERM", val);
+        }
     }
 
     #[test]
-    fn detect_backend_respects_spud_graphics_iterm2_override() {
-        let _guard = ENV_LOCK.lock().unwrap();
+    fn detect_backend_respects_spud_graphics_sixel_override() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
         let original = std::env::var("SPUD_GRAPHICS").ok();
 
-        std::env::set_var("SPUD_GRAPHICS", "iterm2");
-        assert_eq!(detect_backend(), GraphicsBackend::ITerm2);
+        std::env::set_var("SPUD_GRAPHICS", "sixel");
+        assert_eq!(detect_backend(), GraphicsBackend::Sixel);
 
         // Restore original value
         match original {
@@ -86,7 +104,7 @@ mod tests {
 
     #[test]
     fn detect_backend_respects_spud_graphics_unicode_override() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
         let original = std::env::var("SPUD_GRAPHICS").ok();
 
@@ -101,15 +119,17 @@ mod tests {
     }
 
     #[test]
-    fn detect_backend_detects_iterm_app() {
-        let _guard = ENV_LOCK.lock().unwrap();
+    fn detect_backend_detects_wezterm() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
         let original_graphics = std::env::var("SPUD_GRAPHICS").ok();
         let original_term_program = std::env::var("TERM_PROGRAM").ok();
+        let original_term = std::env::var("TERM").ok();
 
-        std::env::remove_var("SPUD_GRAPHICS"); // Ensure override doesn't interfere
-        std::env::set_var("TERM_PROGRAM", "iTerm.app");
-        assert_eq!(detect_backend(), GraphicsBackend::ITerm2);
+        std::env::remove_var("SPUD_GRAPHICS");
+        std::env::remove_var("TERM");
+        std::env::set_var("TERM_PROGRAM", "WezTerm");
+        assert_eq!(detect_backend(), GraphicsBackend::Sixel);
 
         // Restore original values
         match original_graphics {
@@ -120,23 +140,33 @@ mod tests {
             Some(val) => std::env::set_var("TERM_PROGRAM", val),
             None => std::env::remove_var("TERM_PROGRAM"),
         }
+        match original_term {
+            Some(val) => std::env::set_var("TERM", val),
+            None => std::env::remove_var("TERM"),
+        }
     }
 
     #[test]
-    fn detect_backend_detects_wezterm() {
-        let _guard = ENV_LOCK.lock().unwrap();
+    fn detect_backend_detects_xterm() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
         let original_graphics = std::env::var("SPUD_GRAPHICS").ok();
+        let original_term = std::env::var("TERM").ok();
         let original_term_program = std::env::var("TERM_PROGRAM").ok();
 
         std::env::remove_var("SPUD_GRAPHICS");
-        std::env::set_var("TERM_PROGRAM", "WezTerm");
-        assert_eq!(detect_backend(), GraphicsBackend::ITerm2);
+        std::env::remove_var("TERM_PROGRAM");
+        std::env::set_var("TERM", "xterm-256color");
+        assert_eq!(detect_backend(), GraphicsBackend::Sixel);
 
         // Restore original values
         match original_graphics {
             Some(val) => std::env::set_var("SPUD_GRAPHICS", val),
             None => std::env::remove_var("SPUD_GRAPHICS"),
+        }
+        match original_term {
+            Some(val) => std::env::set_var("TERM", val),
+            None => std::env::remove_var("TERM"),
         }
         match original_term_program {
             Some(val) => std::env::set_var("TERM_PROGRAM", val),

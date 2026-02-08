@@ -25,10 +25,10 @@ use spud_core::{
 use spud_ui::{
     console::render_console,
     graphics::{detect_backend, GraphicsBackend},
-    iterm,
     layout::doom_layout,
     renderer::HeroRenderer,
     shell::{render_shell, FaceFrame, ShellView},
+    sixel,
 };
 
 use spud_mod_hello::HelloModule;
@@ -287,15 +287,15 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
             }
         })?;
 
-        // ── Post-draw: iTerm2 inline image rendering ──
-        // Skip iTerm2 rendering if we're about to quit (avoids slow flush on exit)
-        if app.graphics_backend == GraphicsBackend::ITerm2 && !should_quit {
+        // ── Post-draw: Sixel graphics rendering ──
+        // Skip Sixel rendering if we're about to quit (avoids slow flush on exit)
+        if app.graphics_backend == GraphicsBackend::Sixel && !should_quit {
             use ratatui::widgets::Block;
             let inner = Block::default()
                 .borders(ratatui::widgets::Borders::ALL)
                 .inner(rects.hud_face);
             // Pass reference to face.data - pointer stays stable until frame actually changes
-            iterm::render_iterm_face(
+            sixel::render_sixel_face(
                 terminal.backend_mut(),
                 inner,
                 &face.data,

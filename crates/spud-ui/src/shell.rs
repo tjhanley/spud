@@ -75,8 +75,8 @@ pub fn render_shell(
 
     // Face rendering depends on graphics backend
     match view.graphics_backend {
-        GraphicsBackend::ITerm2 => {
-            // For iTerm2, we just draw the border and clear the inner area.
+        GraphicsBackend::Sixel => {
+            // For Sixel, we just draw the border and clear the inner area.
             // The actual image will be written post-draw via terminal.backend_mut().
             let face_block = Block::default().borders(Borders::ALL).title("AGENT");
             let inner = face_block.inner(rects.hud_face);
@@ -106,7 +106,7 @@ pub fn render_shell(
             }
         }
         _ => {
-            // Future backends (Kitty, Sixel) — fall back to placeholder
+            // Future backends (Kitty, ITerm2) — fall back to placeholder
             let face = Paragraph::new(Line::from("[ FACE ]"))
                 .block(Block::default().borders(Borders::ALL).title("AGENT"));
             f.render_widget(face, rects.hud_face);

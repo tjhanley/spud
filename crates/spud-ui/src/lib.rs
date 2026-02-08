@@ -7,7 +7,7 @@
 pub mod console;
 pub mod face;
 pub mod graphics;
-pub mod iterm;
 pub mod layout;
 pub mod renderer;
 pub mod shell;
+pub mod sixel;
