@@ -5,8 +5,6 @@
 //! while [`spud_core`] owns the state.
 
 pub mod console;
-pub mod face;
-pub mod graphics;
 pub mod layout;
 pub mod renderer;
 pub mod shell;

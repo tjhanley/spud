@@ -26,7 +26,7 @@ use spud_ui::{
     console::render_console,
     layout::doom_layout,
     renderer::HeroRenderer,
-    shell::{render_shell, FaceFrame, ShellView},
+    shell::{render_shell, ShellView},
 };
 
 use spud_mod_hello::HelloModule;
@@ -212,7 +212,6 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
         terminal.draw(|f| {
             let rects = doom_layout(f.area(), 9, 18);
 
-            let face = app.agent.current_frame();
             if let Some(m) = app.registry.active() {
                 let hud = m.hud();
                 let view = ShellView {
@@ -220,11 +219,7 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
                     status_line: &app.state.status_line,
                     hud_left: hud.left_lines,
                     hud_right: hud.right_lines,
-                    face: Some(FaceFrame {
-                        data: &face.data,
-                        width: face.width,
-                        height: face.height,
-                    }),
+                    hud_face_lines: Vec::new(),
                 };
 
                 let render_map = &app.render_map;

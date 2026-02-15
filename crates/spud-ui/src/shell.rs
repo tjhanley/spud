@@ -8,16 +8,6 @@ use ratatui::{
 
 use crate::layout::DoomRects;
 
-/// Raw RGBA frame data for the agent face, passed into [`ShellView`].
-pub struct FaceFrame<'a> {
-    /// Raw RGBA pixel data (row-major, 4 bytes/pixel).
-    pub data: &'a [u8],
-    /// Pixel width of the frame.
-    pub width: u32,
-    /// Pixel height of the frame.
-    pub height: u32,
-}
-
 /// Data passed to [`render_shell`] to populate the shell chrome.
 ///
 /// The shell view carries the text content for the top bar, HUD panels, and
@@ -31,8 +21,11 @@ pub struct ShellView<'a> {
     pub hud_left: Vec<String>,
     /// Lines rendered in the right HUD column.
     pub hud_right: Vec<String>,
-    /// Agent face frame to render in the HUD centre panel.
-    pub face: Option<FaceFrame<'a>>,
+    /// Optional text lines rendered in the HUD centre panel.
+    ///
+    /// This is a temporary text-only payload while the new ASCII animation
+    /// pipeline is implemented.
+    pub hud_face_lines: Vec<String>,
 }
 
 /// Render the full Doom-style shell: top bar, hero area, and HUD panels.
@@ -71,19 +64,19 @@ pub fn render_shell(
         Paragraph::new(left_text).block(Block::default().borders(Borders::ALL).title("LEFT"));
     f.render_widget(left, rects.hud_left);
 
-    if let Some(face) = view.face {
-        crate::face::render_face(
-            f.buffer_mut(),
-            rects.hud_face,
-            face.data,
-            face.width,
-            face.height,
-        );
+    let face = if view.hud_face_lines.is_empty() {
+        Paragraph::new(Line::from("[ FACE ]"))
+            .block(Block::default().borders(Borders::ALL).title("AGENT"))
     } else {
-        let face = Paragraph::new(Line::from("[ FACE ]"))
-            .block(Block::default().borders(Borders::ALL).title("AGENT"));
-        f.render_widget(face, rects.hud_face);
-    }
+        let face_text = Text::from(
+            view.hud_face_lines
+                .into_iter()
+                .map(Line::from)
+                .collect::<Vec<_>>(),
+        );
+        Paragraph::new(face_text).block(Block::default().borders(Borders::ALL).title("AGENT"))
+    };
+    f.render_widget(face, rects.hud_face);
 
     let right_text = Text::from(
         view.hud_right
