@@ -1,14 +1,10 @@
-use std::path::Path;
 use std::time::Instant;
 
 use anyhow::Result;
 
-use crate::loader;
+use crate::default_pack;
 use crate::mood::MoodEngine;
-use crate::types::{FacePack, Frame, Mood};
-
-const DEFAULT_SHEET_PNG: &[u8] = include_bytes!("../../../assets/faces/default/sheet.png");
-const DEFAULT_SHEET_JSON: &[u8] = include_bytes!("../../../assets/faces/default/face.json");
+use crate::types::{AsciiFrame, FacePack, Mood};
 
 /// The SPUD agent face — owns a face pack and drives mood animation.
 ///
@@ -19,15 +15,9 @@ pub struct Agent {
 }
 
 impl Agent {
-    /// Load the default (embedded) face pack.
+    /// Load the default (embedded) ASCII face pack.
     pub fn load_default(now: Instant) -> Result<Self> {
-        let pack = loader::load_from_bytes(DEFAULT_SHEET_PNG, DEFAULT_SHEET_JSON)?;
-        Ok(Self::from_pack(pack, now))
-    }
-
-    /// Load a custom face pack from PNG and JSON files.
-    pub fn load_from_files(png: &Path, json: &Path, now: Instant) -> Result<Self> {
-        let pack = loader::load_from_files(png, json)?;
+        let pack = default_pack::load_default_pack()?;
         Ok(Self::from_pack(pack, now))
     }
 
@@ -44,8 +34,13 @@ impl Agent {
     }
 
     /// Returns the current animation frame.
-    pub fn current_frame(&self) -> &Frame {
+    pub fn current_frame(&self) -> &AsciiFrame {
         self.engine.current_frame()
+    }
+
+    /// Returns the current frame as text lines.
+    pub fn current_frame_lines(&self) -> &[String] {
+        &self.current_frame().lines
     }
 
     /// Switch to a different mood.
@@ -67,8 +62,8 @@ mod tests {
     fn load_default_succeeds() {
         let agent = Agent::load_default(Instant::now()).unwrap();
         assert_eq!(agent.mood(), Mood::Neutral);
-        let frame = agent.current_frame();
-        assert_eq!(frame.width, 128);
-        assert_eq!(frame.height, 128);
+        let frame = agent.current_frame_lines();
+        assert!(!frame.is_empty());
+        assert!(frame.iter().all(|line| !line.is_empty()));
     }
 }
