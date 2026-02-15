@@ -1308,6 +1308,12 @@ dependencies = [
 [[package]]
 name = "spud-remote"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "semver",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "spud-ui"
