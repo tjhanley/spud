@@ -1,8 +1,7 @@
-//! Face pack loader and mood state machine for the SPUD agent.
+//! ASCII face pack and mood state machine for the SPUD agent.
 //!
-//! This crate decodes a PNG sprite sheet + JSON metadata into per-mood
-//! animation frames, and drives a mood state machine that advances
-//! frames on a timer.
+//! This crate provides embedded per-mood ASCII animation frames and drives
+//! a mood state machine that advances frames on a timer.
 //!
 //! # Quick start
 //!
@@ -13,13 +12,13 @@
 //! let mut agent = Agent::load_default(Instant::now()).unwrap();
 //! agent.set_mood(Mood::GodMode, Instant::now());
 //! agent.tick(Instant::now());
-//! let _frame = agent.current_frame();
+//! let _frame = agent.current_frame_lines();
 //! ```
 
 mod agent;
-mod loader;
+mod default_pack;
 mod mood;
 mod types;
 
 pub use agent::Agent;
-pub use types::{FacePack, Frame, Mood};
+pub use types::{AsciiFrame, FacePack, Mood};

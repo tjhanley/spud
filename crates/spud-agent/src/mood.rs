@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use crate::types::{FacePack, Frame, Mood};
+use crate::types::{AsciiFrame, FacePack, Mood};
 
 /// Default interval between animation frames.
 const DEFAULT_FRAME_INTERVAL: Duration = Duration::from_millis(300);
@@ -55,7 +55,7 @@ impl MoodEngine {
     }
 
     /// Returns the current animation frame.
-    pub fn current_frame(&self) -> &Frame {
+    pub fn current_frame(&self) -> &AsciiFrame {
         &self.pack.frames[self.mood as usize][self.frame_index]
     }
 
@@ -68,30 +68,22 @@ impl MoodEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::Frame;
+    use crate::types::AsciiFrame;
 
-    /// Build a minimal [`FacePack`] with 1×1 frames whose RGBA red channel
-    /// encodes `mood * 16 + frame` for easy assertion.
+    /// Build a minimal [`FacePack`] with single-line tagged frames like
+    /// `m2f1` (mood 2, frame 1) for easy assertion.
     fn test_pack(frames_per_mood: usize) -> FacePack {
         let mut frames = Vec::new();
         for mood in 0..Mood::COUNT {
             let mut mood_frames = Vec::new();
             for f in 0..frames_per_mood {
-                let tag = (mood * 16 + f) as u8;
-                mood_frames.push(Frame {
-                    data: vec![tag, 0, 0, 255],
-                    width: 1,
-                    height: 1,
+                mood_frames.push(AsciiFrame {
+                    lines: vec![format!("m{mood}f{f}")],
                 });
             }
             frames.push(mood_frames);
         }
-        FacePack {
-            frames,
-            frames_per_mood,
-            frame_width: 1,
-            frame_height: 1,
-        }
+        FacePack::new(frames).unwrap()
     }
 
     #[test]
@@ -99,8 +91,7 @@ mod tests {
         let now = Instant::now();
         let engine = MoodEngine::new(test_pack(3), now);
         assert_eq!(engine.mood(), Mood::Neutral);
-        // Frame 0 of Neutral: tag = 0*16+0 = 0
-        assert_eq!(engine.current_frame().data[0], 0);
+        assert_eq!(engine.current_frame().lines[0], "m0f0");
     }
 
     #[test]
@@ -111,14 +102,13 @@ mod tests {
         // Advance past frame 0
         let t1 = now + Duration::from_millis(300);
         engine.tick(t1);
-        assert_eq!(engine.current_frame().data[0], 0 * 16 + 1); // Neutral frame 1
+        assert_eq!(engine.current_frame().lines[0], "m0f1");
 
         // Switch mood — should reset to frame 0
         let t2 = t1 + Duration::from_millis(10);
         engine.set_mood(Mood::Angry, t2);
         assert_eq!(engine.mood(), Mood::Angry);
-        // Frame 0 of Angry: tag = 2*16+0 = 32
-        assert_eq!(engine.current_frame().data[0], 2 * 16);
+        assert_eq!(engine.current_frame().lines[0], "m2f0");
     }
 
     #[test]
@@ -129,11 +119,11 @@ mod tests {
         // Advance to frame 1
         let t1 = now + Duration::from_millis(300);
         engine.tick(t1);
-        assert_eq!(engine.current_frame().data[0], 1); // Neutral frame 1
+        assert_eq!(engine.current_frame().lines[0], "m0f1");
 
         // Setting same mood should NOT reset
         engine.set_mood(Mood::Neutral, t1);
-        assert_eq!(engine.current_frame().data[0], 1); // still frame 1
+        assert_eq!(engine.current_frame().lines[0], "m0f1");
     }
 
     #[test]
@@ -141,12 +131,9 @@ mod tests {
         let now = Instant::now();
         let mut engine = MoodEngine::new(test_pack(3), now);
 
-        for (step, expected_frame) in [0u8, 1, 2, 0, 1].iter().enumerate() {
-            let tag = engine.current_frame().data[0];
-            assert_eq!(
-                tag, *expected_frame,
-                "step {step}: expected frame {expected_frame}"
-            );
+        for (step, expected) in ["m0f0", "m0f1", "m0f2", "m0f0", "m0f1"].iter().enumerate() {
+            let tag = &engine.current_frame().lines[0];
+            assert_eq!(tag, expected, "step {step}: expected frame {expected}");
             engine.tick(now + Duration::from_millis(300 * (step as u64 + 1)));
         }
     }
@@ -161,7 +148,7 @@ mod tests {
             engine.tick(now + Duration::from_millis(300 * i));
         }
         // Should be back to frame 0
-        assert_eq!(engine.current_frame().data[0], 0);
+        assert_eq!(engine.current_frame().lines[0], "m0f0");
     }
 
     #[test]
@@ -171,11 +158,11 @@ mod tests {
 
         // Tick just before the interval
         engine.tick(now + Duration::from_millis(299));
-        assert_eq!(engine.current_frame().data[0], 0); // still frame 0
+        assert_eq!(engine.current_frame().lines[0], "m0f0");
 
         // Tick at exactly the interval
         engine.tick(now + Duration::from_millis(300));
-        assert_eq!(engine.current_frame().data[0], 1); // frame 1
+        assert_eq!(engine.current_frame().lines[0], "m0f1");
     }
 
     #[test]
@@ -185,6 +172,6 @@ mod tests {
 
         // Skip 750ms in one tick — should advance 2 frames (600ms worth), not just 1
         engine.tick(now + Duration::from_millis(750));
-        assert_eq!(engine.current_frame().data[0], 2); // frame 2, not 1
+        assert_eq!(engine.current_frame().lines[0], "m0f2");
     }
 }

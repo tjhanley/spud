@@ -1,19 +1,19 @@
-use std::collections::HashMap;
+use anyhow::{bail, Result};
 
-use serde::Deserialize;
+/// A single ASCII animation frame.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AsciiFrame {
+    /// Multi-line face content rendered in the HUD face panel.
+    pub lines: Vec<String>,
+}
 
-/// A single animation frame: raw RGBA pixel data at a known resolution.
-///
-/// Stored as a flat `Vec<u8>` in row-major RGBA order (4 bytes per pixel)
-/// so consumers don't need to depend on the `image` crate.
-#[derive(Debug, Clone)]
-pub struct Frame {
-    /// Raw RGBA pixel data, length = `width * height * 4`.
-    pub data: Vec<u8>,
-    /// Frame width in pixels.
-    pub width: u32,
-    /// Frame height in pixels.
-    pub height: u32,
+impl AsciiFrame {
+    /// Construct an [`AsciiFrame`] from static string lines.
+    pub fn from_lines(lines: &[&str]) -> Self {
+        Self {
+            lines: lines.iter().map(|line| (*line).to_string()).collect(),
+        }
+    }
 }
 
 /// The six moods a SPUD agent face can display.
@@ -51,30 +51,48 @@ impl Mood {
     ];
 }
 
-/// A complete face pack: per-mood animation frames decoded from a sprite sheet.
+/// A complete face pack: per-mood ASCII animation frames.
 #[derive(Debug, Clone)]
 pub struct FacePack {
     /// Frames indexed by `[mood_ordinal][frame_index]`.
-    pub frames: Vec<Vec<Frame>>,
+    pub frames: Vec<Vec<AsciiFrame>>,
     /// Number of animation frames per mood.
     pub frames_per_mood: usize,
-    /// Width of each frame in pixels.
-    pub frame_width: u32,
-    /// Height of each frame in pixels.
-    pub frame_height: u32,
 }
 
-/// JSON metadata for a face pack sprite sheet.
-///
-/// Deserialized from `face.json` alongside the PNG.
-#[derive(Debug, Deserialize)]
-pub(crate) struct FacePackMeta {
-    /// `[width, height]` of each sprite frame.
-    pub sprite_size: [u32; 2],
-    /// Number of animation frames per mood row.
-    pub frames_per_mood: usize,
-    /// Maps mood name (e.g. `"neutral"`) to its row index in the sheet.
-    pub moods: HashMap<String, usize>,
+impl FacePack {
+    /// Build a validated face pack.
+    ///
+    /// Requires one mood entry per [`Mood`] and the same number of frames for
+    /// each mood.
+    pub fn new(frames: Vec<Vec<AsciiFrame>>) -> Result<Self> {
+        if frames.len() != Mood::COUNT {
+            bail!(
+                "face pack must define {} moods, got {}",
+                Mood::COUNT,
+                frames.len()
+            );
+        }
+
+        let frames_per_mood = frames[0].len();
+        if frames_per_mood == 0 {
+            bail!("face pack must contain at least one frame per mood");
+        }
+
+        for (idx, mood_frames) in frames.iter().enumerate() {
+            if mood_frames.len() != frames_per_mood {
+                bail!(
+                    "mood index {idx} has {} frames, expected {frames_per_mood}",
+                    mood_frames.len()
+                );
+            }
+        }
+
+        Ok(Self {
+            frames,
+            frames_per_mood,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -94,5 +112,36 @@ mod tests {
     #[test]
     fn mood_all_matches_count() {
         assert_eq!(Mood::ALL.len(), Mood::COUNT);
+    }
+
+    #[test]
+    fn face_pack_rejects_missing_mood_rows() {
+        let frames = vec![vec![AsciiFrame::from_lines(&["x"])]];
+        let err = FacePack::new(frames).unwrap_err();
+        assert!(err.to_string().contains("must define"));
+    }
+
+    #[test]
+    fn face_pack_rejects_zero_frames() {
+        let mut frames = Vec::new();
+        for _ in 0..Mood::COUNT {
+            frames.push(Vec::new());
+        }
+        let err = FacePack::new(frames).unwrap_err();
+        assert!(err.to_string().contains("at least one frame"));
+    }
+
+    #[test]
+    fn face_pack_rejects_inconsistent_frame_counts() {
+        let mut frames = Vec::new();
+        frames.push(vec![AsciiFrame::from_lines(&["a"])]);
+        for _ in 1..Mood::COUNT {
+            frames.push(vec![
+                AsciiFrame::from_lines(&["a"]),
+                AsciiFrame::from_lines(&["b"]),
+            ]);
+        }
+        let err = FacePack::new(frames).unwrap_err();
+        assert!(err.to_string().contains("expected"));
     }
 }

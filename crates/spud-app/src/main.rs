@@ -219,7 +219,7 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
                     status_line: &app.state.status_line,
                     hud_left: hud.left_lines,
                     hud_right: hud.right_lines,
-                    hud_face_lines: Vec::new(),
+                    hud_face_lines: app.agent.current_frame_lines().to_vec(),
                 };
 
                 let render_map = &app.render_map;
