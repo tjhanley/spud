@@ -12,10 +12,6 @@ if [ -x "$ROOT_DIR/.tools/cargo/bin/cargo-deny" ]; then
   exec "$ROOT_DIR/.tools/cargo/bin/cargo-deny" check advisories "$@"
 fi
 
-if cargo deny --version >/dev/null 2>&1; then
-  exec cargo deny check advisories "$@"
-fi
-
 cat >&2 <<'EOF'
 cargo-deny is not installed.
 Install with one of:

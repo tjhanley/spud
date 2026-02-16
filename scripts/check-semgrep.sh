@@ -37,6 +37,7 @@ fi
 if [[ "$SEMGREP_BIN" == "$ROOT_DIR/.tools/semgrep-venv/bin/"* ]]; then
   SPUD_SEMGREP_HOME="${SPUD_SEMGREP_HOME:-$ROOT_DIR/.tools/home}"
   mkdir -p "$SPUD_SEMGREP_HOME"
+  # Keep Semgrep cache/log writes inside repo-local tooling paths.
   export HOME="$SPUD_SEMGREP_HOME"
 fi
 
