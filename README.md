@@ -26,6 +26,8 @@ cargo run -p spud-app
 cargo fmt --all -- --check
 cargo clippy --workspace -- -D warnings
 cargo test --workspace
+cargo deny check advisories
+semgrep scan --config p/rust --error --metrics=off
 ```
 
 ### License
