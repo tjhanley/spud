@@ -26,6 +26,9 @@ cargo run -p spud-app
 cargo fmt --all -- --check
 cargo clippy --workspace -- -D warnings
 cargo test --workspace
+./scripts/check-cargo-deny.sh
+./scripts/check-semgrep.sh
+./scripts/check-static-analysis.sh
 ```
 
 ### License
