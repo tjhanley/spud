@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 use std::fmt;
+use std::sync::LazyLock;
 
 use anyhow::{anyhow, Context, Result};
 use semver::{Version, VersionReq};
@@ -57,6 +58,9 @@ pub struct JsonRpcError {
 }
 
 /// Handshake-specific negotiation failures.
+///
+/// This is a protocol-layer error type (instead of `anyhow`) so callers can
+/// map failures to stable JSON-RPC error codes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HandshakeError {
     InvalidVersionRequirement(String),
@@ -191,6 +195,11 @@ pub struct ActiveModule {
 pub struct TelemetryDatum {
     pub source: String,
     pub key: String,
+    /// Forward-compatible telemetry payload value.
+    ///
+    /// The OpenRPC v1 schema currently constrains this to scalar JSON types for
+    /// stability, while Rust keeps `Value` to permit safe widening in future
+    /// protocol revisions.
     pub value: Value,
 }
 
@@ -254,10 +263,19 @@ struct OpenRpcMethod {
     name: String,
 }
 
+static OPENRPC_DOCUMENT: LazyLock<std::result::Result<OpenRpcDocument, String>> =
+    LazyLock::new(|| {
+        serde_json::from_str(OPENRPC_SPEC_JSON)
+            .map_err(|err| format!("failed to parse embedded OpenRPC document: {err}"))
+    });
+
+fn openrpc_document() -> Result<&'static OpenRpcDocument> {
+    OPENRPC_DOCUMENT.as_ref().map_err(|msg| anyhow!("{msg}"))
+}
+
 /// Parse and validate the embedded OpenRPC document.
 pub fn validate_openrpc_spec() -> Result<()> {
-    let doc: OpenRpcDocument = serde_json::from_str(OPENRPC_SPEC_JSON)
-        .context("failed to parse embedded OpenRPC document")?;
+    let doc = openrpc_document().context("failed to load embedded OpenRPC document")?;
 
     if doc.openrpc != OPENRPC_VERSION {
         return Err(anyhow!(
@@ -283,9 +301,8 @@ pub fn validate_openrpc_spec() -> Result<()> {
 
 /// Read method names from embedded OpenRPC spec.
 pub fn openrpc_method_names() -> Result<Vec<String>> {
-    let doc: OpenRpcDocument = serde_json::from_str(OPENRPC_SPEC_JSON)
-        .context("failed to parse embedded OpenRPC document")?;
-    Ok(doc.methods.into_iter().map(|m| m.name).collect())
+    let doc = openrpc_document().context("failed to load embedded OpenRPC document")?;
+    Ok(doc.methods.iter().map(|m| m.name.clone()).collect())
 }
 
 /// Host capability snapshot derived from OpenRPC contract and event categories.

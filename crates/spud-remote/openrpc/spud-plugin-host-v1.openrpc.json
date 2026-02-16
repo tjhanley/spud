@@ -192,6 +192,7 @@
       "GetSnapshotParams": {
         "type": "object",
         "additionalProperties": false,
+        "required": [],
         "properties": {}
       },
       "ActiveModule": {
