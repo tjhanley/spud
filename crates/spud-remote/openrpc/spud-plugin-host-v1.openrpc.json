@@ -1,0 +1,387 @@
+{
+  "openrpc": "1.3.2",
+  "info": {
+    "title": "SPUD Plugin Host API",
+    "version": "1.0.0",
+    "description": "Versioned JSON-RPC contract for SPUD plugins over stdio."
+  },
+  "methods": [
+    {
+      "name": "spud.handshake",
+      "summary": "Negotiate host API version and return host capabilities.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/HandshakeParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/HandshakeResult"
+        }
+      }
+    },
+    {
+      "name": "spud.state.get_snapshot",
+      "summary": "Fetch a read-only state snapshot for plugin logic.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/GetSnapshotParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/StateSnapshot"
+        }
+      }
+    },
+    {
+      "name": "spud.events.subscribe",
+      "summary": "Subscribe plugin to selected event categories.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/SubscribeParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/SubscriptionResult"
+        }
+      }
+    },
+    {
+      "name": "spud.events.unsubscribe",
+      "summary": "Unsubscribe plugin from selected event categories.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/SubscribeParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/SubscriptionResult"
+        }
+      }
+    },
+    {
+      "name": "spud.host.invoke_command",
+      "summary": "Request host command execution (permission checked).",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/InvokeCommandParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/InvokeCommandResult"
+        }
+      }
+    },
+    {
+      "name": "spud.host.publish_event",
+      "summary": "Publish custom event into host bus (permission checked).",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/PublishEventParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/PublishEventResult"
+        }
+      }
+    }
+  ],
+  "components": {
+    "schemas": {
+      "HandshakeParams": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "plugin_id",
+          "plugin_version",
+          "supported_api_versions"
+        ],
+        "properties": {
+          "plugin_id": {
+            "type": "string"
+          },
+          "plugin_version": {
+            "type": "string",
+            "description": "Plugin package semver."
+          },
+          "supported_api_versions": {
+            "type": "string",
+            "description": "Semver requirement range accepted by plugin."
+          },
+          "requested_capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "HandshakeResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "selected_api_version",
+          "host_capabilities"
+        ],
+        "properties": {
+          "selected_api_version": {
+            "type": "string"
+          },
+          "host_capabilities": {
+            "$ref": "#/components/schemas/HostCapabilities"
+          }
+        }
+      },
+      "HostCapabilities": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "methods",
+          "event_categories"
+        ],
+        "properties": {
+          "methods": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "event_categories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventCategory"
+            }
+          }
+        }
+      },
+      "GetSnapshotParams": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "ActiveModule": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "TelemetryDatum": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source",
+          "key",
+          "value"
+        ],
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          }
+        }
+      },
+      "StateSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status_line",
+          "uptime_seconds",
+          "tps",
+          "telemetry"
+        ],
+        "properties": {
+          "active_module": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ActiveModule"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status_line": {
+            "type": "string"
+          },
+          "uptime_seconds": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "tps": {
+            "type": "number"
+          },
+          "telemetry": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TelemetryDatum"
+            }
+          }
+        }
+      },
+      "EventCategory": {
+        "type": "string",
+        "enum": [
+          "tick",
+          "resize",
+          "module_lifecycle",
+          "telemetry",
+          "custom"
+        ]
+      },
+      "SubscribeParams": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "categories"
+        ],
+        "properties": {
+          "categories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventCategory"
+            }
+          }
+        }
+      },
+      "SubscriptionResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "subscribed"
+        ],
+        "properties": {
+          "subscribed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventCategory"
+            }
+          }
+        }
+      },
+      "InvokeCommandParams": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "command"
+        ],
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "InvokeCommandResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "lines"
+        ],
+        "properties": {
+          "lines": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "PublishEventParams": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tag",
+          "payload"
+        ],
+        "properties": {
+          "tag": {
+            "type": "string"
+          },
+          "payload": {
+            "type": "string"
+          }
+        }
+      },
+      "PublishEventResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "accepted"
+        ],
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}
