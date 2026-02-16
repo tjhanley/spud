@@ -36,3 +36,33 @@ jobs:
 
     - name: Test
       run: cargo test --workspace
+
+  static-analysis:
+    name: Static Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install stable toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache cargo registry & build
+      uses: Swatinem/rust-cache@v2
+
+    - name: Install cargo-deny
+      uses: taiki-e/install-action@cargo-deny
+
+    - name: Cargo deny (RustSec advisories)
+      run: cargo deny check advisories
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.x"
+
+    - name: Install Semgrep
+      run: python -m pip install --upgrade pip semgrep
+
+    - name: Semgrep (Rust rules)
+      run: semgrep scan --config p/rust --error --metrics=off
