@@ -61,6 +61,7 @@ pub struct JsonRpcError {
 pub enum HandshakeError {
     InvalidVersionRequirement(String),
     UnsupportedApiVersion { host: String, supported: String },
+    UnsupportedRequestedCapabilities(Vec<String>),
     HostApiVersionInvalid(String),
     HostCapabilitiesUnavailable(String),
 }
@@ -71,6 +72,7 @@ impl HandshakeError {
         match self {
             Self::InvalidVersionRequirement(_) => error_code::INVALID_PARAMS,
             Self::UnsupportedApiVersion { .. } => error_code::UNSUPPORTED_API_VERSION,
+            Self::UnsupportedRequestedCapabilities(_) => error_code::INVALID_PARAMS,
             Self::HostApiVersionInvalid(_) | Self::HostCapabilitiesUnavailable(_) => {
                 error_code::PLUGIN_UNAVAILABLE
             }
@@ -96,6 +98,11 @@ impl fmt::Display for HandshakeError {
             Self::UnsupportedApiVersion { host, supported } => write!(
                 f,
                 "host API version {host} is not compatible with plugin requirement {supported}"
+            ),
+            Self::UnsupportedRequestedCapabilities(requested) => write!(
+                f,
+                "requested_capabilities contains no supported entries: {}",
+                requested.join(", ")
             ),
             Self::HostApiVersionInvalid(version) => {
                 write!(
@@ -124,6 +131,7 @@ pub enum EventCategory {
 }
 
 impl EventCategory {
+    /// Every event category the host supports.
     pub const ALL: [EventCategory; 5] = [
         EventCategory::Tick,
         EventCategory::Resize,
@@ -131,6 +139,16 @@ impl EventCategory {
         EventCategory::Telemetry,
         EventCategory::Custom,
     ];
+
+    fn as_str(self) -> &'static str {
+        match self {
+            EventCategory::Tick => "tick",
+            EventCategory::Resize => "resize",
+            EventCategory::ModuleLifecycle => "module_lifecycle",
+            EventCategory::Telemetry => "telemetry",
+            EventCategory::Custom => "custom",
+        }
+    }
 }
 
 /// Parameters for `spud.handshake`.
@@ -304,12 +322,47 @@ pub fn build_handshake_result(
     params: &HandshakeParams,
 ) -> std::result::Result<HandshakeResult, HandshakeError> {
     let selected = negotiate_api_version(&params.supported_api_versions)?;
-    let capabilities = host_capabilities()
+    let all_capabilities = host_capabilities()
         .map_err(|err| HandshakeError::HostCapabilitiesUnavailable(err.to_string()))?;
+    let capabilities = filter_host_capabilities(all_capabilities, &params.requested_capabilities)?;
 
     Ok(HandshakeResult {
         selected_api_version: selected,
         host_capabilities: capabilities,
+    })
+}
+
+fn filter_host_capabilities(
+    all: HostCapabilities,
+    requested: &[String],
+) -> std::result::Result<HostCapabilities, HandshakeError> {
+    if requested.is_empty() {
+        return Ok(all);
+    }
+
+    let requested: BTreeSet<_> = requested.iter().map(String::as_str).collect();
+
+    let methods = all
+        .methods
+        .into_iter()
+        .filter(|method| requested.contains(method.as_str()))
+        .collect::<Vec<_>>();
+
+    let event_categories = all
+        .event_categories
+        .into_iter()
+        .filter(|category| requested.contains(category.as_str()))
+        .collect::<Vec<_>>();
+
+    if methods.is_empty() && event_categories.is_empty() {
+        return Err(HandshakeError::UnsupportedRequestedCapabilities(
+            requested.into_iter().map(str::to_string).collect(),
+        ));
+    }
+
+    Ok(HostCapabilities {
+        methods,
+        event_categories,
     })
 }
 
@@ -368,5 +421,45 @@ mod tests {
             .methods
             .iter()
             .any(|m| m == "spud.handshake"));
+    }
+
+    #[test]
+    fn handshake_requested_capabilities_filters_results() {
+        let params = HandshakeParams {
+            plugin_id: "test.plugin".to_string(),
+            plugin_version: "0.1.0".to_string(),
+            supported_api_versions: "^1.0".to_string(),
+            requested_capabilities: vec![
+                "spud.state.get_snapshot".to_string(),
+                "telemetry".to_string(),
+            ],
+        };
+
+        let result = build_handshake_result(&params).unwrap();
+        assert_eq!(
+            result.host_capabilities.methods,
+            vec!["spud.state.get_snapshot".to_string()]
+        );
+        assert_eq!(
+            result.host_capabilities.event_categories,
+            vec![EventCategory::Telemetry]
+        );
+    }
+
+    #[test]
+    fn handshake_requested_capabilities_rejects_unsupported_only() {
+        let params = HandshakeParams {
+            plugin_id: "test.plugin".to_string(),
+            plugin_version: "0.1.0".to_string(),
+            supported_api_versions: "^1.0".to_string(),
+            requested_capabilities: vec!["not.supported".to_string()],
+        };
+
+        let err = build_handshake_result(&params).unwrap_err();
+        assert!(matches!(
+            err,
+            HandshakeError::UnsupportedRequestedCapabilities(_)
+        ));
+        assert_eq!(err.code(), error_code::INVALID_PARAMS);
     }
 }
