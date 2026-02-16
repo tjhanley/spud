@@ -26,8 +26,9 @@ cargo run -p spud-app
 cargo fmt --all -- --check
 cargo clippy --workspace -- -D warnings
 cargo test --workspace
-cargo deny check advisories
-semgrep scan --config p/rust --error --metrics=off --exclude-rule rust.lang.security.unsafe-usage.unsafe-usage --exclude-rule rust.lang.security.temp-dir.temp-dir
+./scripts/check-cargo-deny.sh
+./scripts/check-semgrep.sh
+./scripts/check-static-analysis.sh
 ```
 
 ### License
