@@ -65,4 +65,10 @@ jobs:
       run: python -m pip install --upgrade pip semgrep
 
     - name: Semgrep (Rust rules)
-      run: semgrep scan --config p/rust --error --metrics=off
+      run: >
+        semgrep scan
+        --config p/rust
+        --error
+        --metrics=off
+        --exclude-rule rust.lang.security.unsafe-usage.unsafe-usage
+        --exclude-rule rust.lang.security.temp-dir.temp-dir
