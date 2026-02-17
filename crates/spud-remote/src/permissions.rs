@@ -277,6 +277,19 @@ subscriptions = [{subscriptions}]
     }
 
     #[test]
+    fn authorize_publish_event_accepts_allowlisted_tag() {
+        let manifest = manifest_with_permissions("^1.0.0", &[], &["plugin.metrics"], &[]);
+        let policy = policy_from_manifest(&manifest).unwrap();
+
+        let params = PublishEventParams {
+            tag: "plugin.metrics".to_string(),
+            payload: "{\"ok\":true}".to_string(),
+        };
+
+        assert!(policy.authorize_publish_event(&params).is_ok());
+    }
+
+    #[test]
     fn authorize_subscriptions_denies_over_privileged_categories() {
         let manifest = manifest_with_permissions("^1.0.0", &[], &[], &["tick", "resize"]);
         let policy = policy_from_manifest(&manifest).unwrap();
