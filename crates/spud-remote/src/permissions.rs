@@ -144,6 +144,8 @@ impl PermissionPolicy {
     }
 
     /// Enforce event subscription allowlist and return authorized categories.
+    ///
+    /// Duplicate categories in the input are silently deduplicated.
     pub fn authorize_subscriptions(
         &self,
         categories: &[EventCategory],
@@ -153,7 +155,7 @@ impl PermissionPolicy {
         let mut seen = BTreeSet::new();
 
         for category in categories {
-            let name = event_category_name(*category);
+            let name = category.as_str();
             if !seen.insert(name) {
                 continue;
             }
@@ -180,16 +182,6 @@ pub fn policy_from_manifest(
     let policy = PermissionPolicy::from_manifest(manifest);
     policy.ensure_host_compatibility()?;
     Ok(policy)
-}
-
-fn event_category_name(category: EventCategory) -> &'static str {
-    match category {
-        EventCategory::Tick => "tick",
-        EventCategory::Resize => "resize",
-        EventCategory::ModuleLifecycle => "module_lifecycle",
-        EventCategory::Telemetry => "telemetry",
-        EventCategory::Custom => "custom",
-    }
 }
 
 #[cfg(test)]
@@ -298,6 +290,18 @@ subscriptions = [{subscriptions}]
             AuthorizationError::UnauthorizedSubscriptions(vec!["custom".to_string()])
         );
         assert_eq!(err.code(), error_code::UNAUTHORIZED);
+    }
+
+    #[test]
+    fn authorize_subscriptions_deduplicates_input_categories() {
+        let manifest = manifest_with_permissions("^1.0.0", &[], &[], &["tick"]);
+        let policy = policy_from_manifest(&manifest).unwrap();
+
+        let authorized = policy
+            .authorize_subscriptions(&[EventCategory::Tick, EventCategory::Tick])
+            .unwrap();
+
+        assert_eq!(authorized, vec![EventCategory::Tick]);
     }
 
     #[test]

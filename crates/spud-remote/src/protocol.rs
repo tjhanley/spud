@@ -144,7 +144,7 @@ impl EventCategory {
         EventCategory::Custom,
     ];
 
-    fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             EventCategory::Tick => "tick",
             EventCategory::Resize => "resize",

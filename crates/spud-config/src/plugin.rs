@@ -78,7 +78,7 @@ impl PluginManifest {
             validate_nonempty("runtime.command", command)?;
         }
 
-        validate_allowlist("runtime.args", &self.runtime.args)?;
+        validate_runtime_args(&self.runtime.args)?;
         validate_allowlist("permissions.commands", &self.permissions.commands)?;
         validate_allowlist("permissions.event_tags", &self.permissions.event_tags)?;
         validate_allowlist("permissions.subscriptions", &self.permissions.subscriptions)?;
@@ -140,6 +140,22 @@ fn validate_nonempty(field: &str, value: &str) -> Result<()> {
     if value.trim().is_empty() {
         bail!("{field} must not be empty")
     }
+    Ok(())
+}
+
+fn validate_runtime_args(args: &[String]) -> Result<()> {
+    for arg in args {
+        if arg.trim().is_empty() {
+            bail!("runtime.args entries must not be empty");
+        }
+        if arg.trim() != arg {
+            bail!(
+                "runtime.args entry {:?} has leading/trailing whitespace",
+                arg
+            );
+        }
+    }
+
     Ok(())
 }
 
@@ -240,5 +256,18 @@ commands = ["help"]
         let manifest = PluginManifest::from_toml_str(VALID_MANIFEST).unwrap();
         let err = manifest.supports_host_api("2.0.0").unwrap_err().to_string();
         assert!(err.contains("plugin requires host_api"));
+    }
+
+    #[test]
+    fn runtime_args_allow_duplicate_flags() {
+        let raw = VALID_MANIFEST.replace(
+            "args = [\"--enable-source-maps\"]",
+            "args = [\"-v\", \"-v\"]",
+        );
+        let manifest = PluginManifest::from_toml_str(&raw).unwrap();
+        assert_eq!(
+            manifest.runtime.args,
+            vec!["-v".to_string(), "-v".to_string()]
+        );
     }
 }
