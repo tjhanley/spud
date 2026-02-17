@@ -33,9 +33,8 @@ impl AuthorizationError {
     /// Map authorization failure to JSON-RPC host error code.
     pub fn code(&self) -> i32 {
         match self {
-            Self::InvalidHostApiRequirement(_) | Self::InvalidHostApiVersion(_) => {
-                error_code::INVALID_PARAMS
-            }
+            Self::InvalidHostApiRequirement(_) => error_code::INVALID_PARAMS,
+            Self::InvalidHostApiVersion(_) => error_code::PLUGIN_UNAVAILABLE,
             Self::UnsupportedHostApi { .. } => error_code::UNSUPPORTED_API_VERSION,
             Self::UnauthorizedCommand(_)
             | Self::UnauthorizedEventTag(_)
@@ -342,5 +341,11 @@ subscriptions = [{subscriptions}]
             .authorize_invoke_command(&command)
             .unwrap_err();
         assert!(matches!(err, AuthorizationError::UnauthorizedCommand(_)));
+    }
+
+    #[test]
+    fn invalid_host_api_version_maps_to_plugin_unavailable() {
+        let err = AuthorizationError::InvalidHostApiVersion("not-semver".to_string());
+        assert_eq!(err.code(), error_code::PLUGIN_UNAVAILABLE);
     }
 }

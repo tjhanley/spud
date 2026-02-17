@@ -69,7 +69,9 @@ impl PluginManifest {
     /// Validate required fields and semantic constraints.
     pub fn validate(&self) -> Result<()> {
         validate_nonempty("id", &self.id)?;
+        validate_no_surrounding_whitespace("id", &self.id)?;
         validate_nonempty("name", &self.name)?;
+        validate_no_surrounding_whitespace("name", &self.name)?;
         validate_nonempty("version", &self.version)?;
         validate_nonempty("runtime.entrypoint", &self.runtime.entrypoint)?;
         validate_nonempty("compatibility.host_api", &self.compatibility.host_api)?;
@@ -139,6 +141,13 @@ impl PluginPermissions {
 fn validate_nonempty(field: &str, value: &str) -> Result<()> {
     if value.trim().is_empty() {
         bail!("{field} must not be empty")
+    }
+    Ok(())
+}
+
+fn validate_no_surrounding_whitespace(field: &str, value: &str) -> Result<()> {
+    if value.trim() != value {
+        bail!("{field} must not have leading/trailing whitespace");
     }
     Ok(())
 }
@@ -269,5 +278,22 @@ commands = ["help"]
             manifest.runtime.args,
             vec!["-v".to_string(), "-v".to_string()]
         );
+    }
+
+    #[test]
+    fn id_with_surrounding_whitespace_is_rejected() {
+        let raw = VALID_MANIFEST.replace("id = \"spud.test\"", "id = \" spud.test \"");
+        let err = PluginManifest::from_toml_str(&raw).unwrap_err().to_string();
+        assert!(err.contains("id must not have leading/trailing whitespace"));
+    }
+
+    #[test]
+    fn name_with_surrounding_whitespace_is_rejected() {
+        let raw = VALID_MANIFEST.replace(
+            "name = \"SPUD Test Plugin\"",
+            "name = \" SPUD Test Plugin \"",
+        );
+        let err = PluginManifest::from_toml_str(&raw).unwrap_err().to_string();
+        assert!(err.contains("name must not have leading/trailing whitespace"));
     }
 }

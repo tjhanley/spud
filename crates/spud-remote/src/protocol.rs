@@ -144,6 +144,7 @@ impl EventCategory {
         EventCategory::Custom,
     ];
 
+    /// Returns the snake_case identifier for this category, matching JSON-RPC payloads.
     pub fn as_str(self) -> &'static str {
         match self {
             EventCategory::Tick => "tick",
