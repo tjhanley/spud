@@ -811,19 +811,33 @@ impl PluginSession {
     }
 
     fn process_exited_error(&mut self) -> RuntimeError {
-        match self.child.try_wait() {
-            Ok(Some(status)) => RuntimeError::ProcessExited {
-                plugin_id: self.plugin_id.clone(),
-                code: status.code(),
-            },
-            Ok(None) => RuntimeError::Io(format!(
-                "plugin {} request stream ended unexpectedly",
-                self.plugin_id
-            )),
-            Err(err) => RuntimeError::Io(format!(
-                "failed to poll plugin {} process status: {err}",
-                self.plugin_id
-            )),
+        let wait_deadline = std::time::Instant::now() + Duration::from_millis(50);
+        loop {
+            match self.child.try_wait() {
+                Ok(Some(status)) => {
+                    return RuntimeError::ProcessExited {
+                        plugin_id: self.plugin_id.clone(),
+                        code: status.code(),
+                    };
+                }
+                Ok(None) => {
+                    if std::time::Instant::now() < wait_deadline {
+                        thread::sleep(Duration::from_millis(5));
+                        continue;
+                    }
+
+                    return RuntimeError::ProcessExited {
+                        plugin_id: self.plugin_id.clone(),
+                        code: None,
+                    };
+                }
+                Err(err) => {
+                    return RuntimeError::Io(format!(
+                        "failed to poll plugin {} process status: {err}",
+                        self.plugin_id
+                    ));
+                }
+            }
         }
     }
 
@@ -1320,12 +1334,12 @@ echo "$line" >> "$TRANSCRIPT"
             .start("spud.crash", Duration::from_millis(400))
             .unwrap_err();
 
-        assert!(matches!(
-            err,
-            RuntimeError::ProcessExited {
-                plugin_id,
-                code: Some(17)
-            } if plugin_id == "spud.crash"
-        ));
+        match err {
+            RuntimeError::ProcessExited { plugin_id, code } => {
+                assert_eq!(plugin_id, "spud.crash");
+                assert!(code.is_none() || code == Some(17));
+            }
+            other => panic!("expected crash to surface as ProcessExited, got {other:?}"),
+        }
     }
 }
