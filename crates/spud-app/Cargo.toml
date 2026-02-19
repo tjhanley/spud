@@ -7,10 +7,12 @@ edition = "2021"
 anyhow = "1"
 crossterm = { workspace = true }
 ratatui = { workspace = true }
+serde_json = { workspace = true }
 tracing = "0.1"
 
 spud-agent = { path = "../spud-agent" }
 spud-core = { path = "../spud-core" }
+spud-remote = { path = "../spud-remote" }
 spud-ui = { path = "../spud-ui" }
 spud-mod-hello = { path = "../spud-mod-hello" }
 spud-mod-stats = { path = "../spud-mod-stats" }
