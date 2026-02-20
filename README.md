@@ -32,6 +32,15 @@ Current status:
 cargo run -p spud-app
 ```
 
+### Plugin Runtime
+- `SPUD_PLUGIN_DIRS`: optional path-list of plugin roots (uses your OS path separator).
+- Each plugin root is scanned recursively for `plugin.toml`.
+
+Example:
+```bash
+SPUD_PLUGIN_DIRS="./plugins:$HOME/.config/spud/plugins" cargo run -p spud-app
+```
+
 ### Controls
 - `` ` `` or `~`: toggle console overlay
 - `Tab`: cycle active module

@@ -1,6 +1,8 @@
 use std::any::Any;
 use std::collections::HashMap;
+use std::env;
 use std::io::{self, Stdout};
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
@@ -10,17 +12,25 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, layout::Rect, Frame, Terminal};
+use serde_json::{json, Value};
 
 use spud_core::{
     bus::EventBus,
     command::{self, CommandContext, CommandOutput, CommandRegistry},
     console::Console,
-    event::Event,
+    event::{Event, TelemetryValue},
     fps::TickCounter,
     logging::{self, LogBuffer, LogEntry, LogLevel},
     module::Module,
     registry::ModuleRegistry,
     state::AppState,
+};
+use spud_remote::{
+    protocol::{
+        ActiveModule, EventCategory, InvokeCommandParams, InvokeCommandResult, PublishEventParams,
+        PublishEventResult, StateSnapshot,
+    },
+    runtime::{HostBridge, PluginRuntime, RuntimeError},
 };
 use spud_ui::{
     console::render_console,
@@ -40,6 +50,7 @@ struct App {
     state: AppState,
     registry: ModuleRegistry,
     bus: EventBus,
+    plugin_runtime: Option<PluginRuntime>,
     log_buffer: LogBuffer,
     console: Console,
     tick_counter: TickCounter,
@@ -76,18 +87,22 @@ impl App {
         let mut render_map: HashMap<String, RenderFn> = HashMap::new();
         register_module(&mut registry, &mut render_map, HelloModule::new())?;
         register_module(&mut registry, &mut render_map, StatsModule::new())?;
+
         let agent = spud_agent::Agent::load_default(Instant::now())?;
-        Ok(Self {
+        let mut app = Self {
             state: AppState::new(),
             registry,
             bus: EventBus::new(),
+            plugin_runtime: None,
             log_buffer,
             console: Console::default(),
             tick_counter: TickCounter::default(),
             commands: command::builtin_registry(),
             render_map,
             agent,
-        })
+        };
+        app.init_plugin_runtime();
+        Ok(app)
     }
 
     /// Drain new entries from the shared log buffer into the console.
@@ -166,6 +181,288 @@ impl App {
             CommandOutput::Quit => true,
         }
     }
+
+    fn init_plugin_runtime(&mut self) {
+        let roots = configured_plugin_roots();
+        if roots.is_empty() {
+            tracing::info!(
+                "plugin runtime disabled (set SPUD_PLUGIN_DIRS to a path list to enable)"
+            );
+            return;
+        }
+
+        let mut runtime = match PluginRuntime::from_search_roots(&roots) {
+            Ok(runtime) => runtime,
+            Err(err) => {
+                tracing::warn!(error = %err, "plugin runtime discovery failed");
+                return;
+            }
+        };
+
+        let plugin_ids = runtime
+            .plugin_ids()
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>();
+
+        if plugin_ids.is_empty() {
+            tracing::info!("plugin runtime enabled but no plugin manifests were discovered");
+            self.plugin_runtime = Some(runtime);
+            return;
+        }
+
+        tracing::info!(
+            plugin_count = plugin_ids.len(),
+            "starting discovered plugin runtime sessions"
+        );
+
+        for plugin_id in plugin_ids {
+            match runtime.start(&plugin_id, Duration::from_secs(2)) {
+                Ok(handshake) => {
+                    tracing::info!(
+                        plugin_id = %plugin_id,
+                        selected_api_version = %handshake.selected_api_version,
+                        methods = handshake.host_capabilities.methods.len(),
+                        event_categories = handshake.host_capabilities.event_categories.len(),
+                        "plugin handshake completed"
+                    );
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        plugin_id = %plugin_id,
+                        error = %err,
+                        "failed to start plugin runtime session"
+                    );
+                }
+            }
+        }
+
+        self.plugin_runtime = Some(runtime);
+    }
+
+    fn pump_plugin_runtime(&mut self, timeout: Duration) {
+        let Some(mut runtime) = self.plugin_runtime.take() else {
+            return;
+        };
+
+        let plugin_ids = runtime
+            .plugin_ids()
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>();
+
+        if plugin_ids.is_empty() {
+            self.plugin_runtime = Some(runtime);
+            return;
+        }
+
+        let mut host = AppHost {
+            state: &self.state,
+            registry: &mut self.registry,
+            bus: &mut self.bus,
+            console: &mut self.console,
+            tick_counter: &self.tick_counter,
+            commands: &self.commands,
+        };
+        let pump_started_at = Instant::now();
+
+        for plugin_id in plugin_ids {
+            if Instant::now()
+                .checked_duration_since(pump_started_at)
+                .unwrap_or(Duration::ZERO)
+                >= timeout
+            {
+                tracing::debug!(
+                    budget_ms = timeout.as_millis(),
+                    "plugin pump budget exhausted for this frame"
+                );
+                break;
+            }
+
+            match runtime.pump_next(&plugin_id, &mut host, Duration::ZERO) {
+                Ok(handled) => {
+                    tracing::debug!(
+                        plugin_id = %handled.plugin_id,
+                        method = %handled.method,
+                        responded_with_error = handled.responded_with_error,
+                        "handled plugin request"
+                    );
+                }
+                Err(RuntimeError::Timeout { .. } | RuntimeError::NotRunning(_)) => {}
+                Err(RuntimeError::ProcessExited { .. }) => {
+                    tracing::warn!(
+                        plugin_id = %plugin_id,
+                        "plugin process exited; runtime session detached"
+                    );
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        plugin_id = %plugin_id,
+                        error = %err,
+                        "plugin runtime pump error"
+                    );
+                }
+            }
+        }
+
+        self.plugin_runtime = Some(runtime);
+    }
+
+    fn forward_event_to_plugins(&mut self, event: &Event) {
+        let Some(mut runtime) = self.plugin_runtime.take() else {
+            return;
+        };
+
+        if let Some((category, tag, payload)) = map_event_for_plugins(event, self.state.started_at)
+        {
+            if let Err(err) = runtime.broadcast_event(category, tag.as_deref(), payload) {
+                tracing::warn!(error = %err, "failed to broadcast host event to plugin runtime");
+            }
+        }
+
+        self.plugin_runtime = Some(runtime);
+    }
+}
+
+struct AppHost<'a> {
+    state: &'a AppState,
+    registry: &'a mut ModuleRegistry,
+    bus: &'a mut EventBus,
+    console: &'a mut Console,
+    tick_counter: &'a TickCounter,
+    commands: &'a CommandRegistry,
+}
+
+impl HostBridge for AppHost<'_> {
+    fn state_snapshot(&mut self) -> Result<StateSnapshot> {
+        let active_module = self.registry.active().map(|module| ActiveModule {
+            id: module.id().to_string(),
+            title: module.title().to_string(),
+        });
+
+        let uptime_seconds = Instant::now()
+            .checked_duration_since(self.state.started_at)
+            .unwrap_or(Duration::ZERO)
+            .as_secs();
+
+        Ok(StateSnapshot {
+            active_module,
+            status_line: self.state.status_line.clone(),
+            uptime_seconds,
+            tps: self.tick_counter.tps(),
+            telemetry: Vec::new(),
+        })
+    }
+
+    fn invoke_command(&mut self, params: InvokeCommandParams) -> Result<InvokeCommandResult> {
+        let mut input = params.command.clone();
+        if !params.args.is_empty() {
+            input.push(' ');
+            input.push_str(&params.args.join(" "));
+        }
+
+        let output = {
+            let mut ctx = CommandContext {
+                registry: self.registry,
+                console: self.console,
+                bus: self.bus,
+                tick_counter: self.tick_counter,
+                started_at: self.state.started_at,
+            };
+            self.commands.execute(&input, &mut ctx)
+        };
+
+        let lines = match output {
+            CommandOutput::Lines(lines) => lines,
+            CommandOutput::Quit => {
+                self.bus.publish(Event::Quit);
+                vec!["quit requested".to_string()]
+            }
+        };
+
+        Ok(InvokeCommandResult { lines })
+    }
+
+    fn publish_event(&mut self, params: PublishEventParams) -> Result<PublishEventResult> {
+        self.bus.publish(Event::Custom {
+            tag: params.tag,
+            payload: params.payload,
+        });
+        Ok(PublishEventResult { accepted: true })
+    }
+}
+
+fn configured_plugin_roots() -> Vec<PathBuf> {
+    let Some(raw) = env::var_os("SPUD_PLUGIN_DIRS") else {
+        return Vec::new();
+    };
+
+    env::split_paths(&raw)
+        .filter(|path| !path.as_os_str().is_empty())
+        .collect()
+}
+
+fn map_event_for_plugins(
+    event: &Event,
+    started_at: Instant,
+) -> Option<(EventCategory, Option<String>, Value)> {
+    match event {
+        Event::Tick { now } => Some((
+            EventCategory::Tick,
+            None,
+            json!({
+                "uptime_seconds": now
+                    .checked_duration_since(started_at)
+                    .unwrap_or(Duration::ZERO)
+                    .as_secs_f64()
+            }),
+        )),
+        Event::Resize { cols, rows } => Some((
+            EventCategory::Resize,
+            None,
+            json!({
+                "cols": cols,
+                "rows": rows
+            }),
+        )),
+        Event::ModuleActivated { id } => Some((
+            EventCategory::ModuleLifecycle,
+            Some("module.activated".to_string()),
+            json!({ "id": id }),
+        )),
+        Event::ModuleDeactivated { id } => Some((
+            EventCategory::ModuleLifecycle,
+            Some("module.deactivated".to_string()),
+            json!({ "id": id }),
+        )),
+        Event::Telemetry { source, key, value } => Some((
+            EventCategory::Telemetry,
+            None,
+            json!({
+                "source": source,
+                "key": key,
+                "value": telemetry_value_json(value)
+            }),
+        )),
+        Event::Custom { tag, payload } => Some((
+            EventCategory::Custom,
+            Some(tag.clone()),
+            parse_custom_payload(payload),
+        )),
+        Event::Key(_) | Event::Quit => None,
+    }
+}
+
+fn telemetry_value_json(value: &TelemetryValue) -> Value {
+    match value {
+        TelemetryValue::Float(value) => json!(value),
+        TelemetryValue::Int(value) => json!(value),
+        TelemetryValue::Text(value) => json!(value),
+    }
+}
+
+fn parse_custom_payload(payload: &str) -> Value {
+    serde_json::from_str(payload).unwrap_or_else(|_| Value::String(payload.to_string()))
 }
 
 fn setup_terminal() -> Result<Terminal<CrosstermBackend<Stdout>>> {
@@ -197,11 +494,13 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
     let mut app = App::new(log_buffer)?;
     let tick_interval = Duration::from_millis(100);
     let poll_timeout = Duration::from_millis(16);
+    let plugin_pump_timeout = Duration::from_millis(1);
     let mut last_tick = Instant::now();
 
     loop {
         // ── Sync logs from tracing into console ──
         app.sync_logs();
+        app.pump_plugin_runtime(plugin_pump_timeout);
 
         // ── Update animation state ──
         let now = Instant::now();
@@ -313,6 +612,7 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, log_buffer: LogBuffer)
                 return Ok(());
             }
             app.registry.broadcast(ev);
+            app.forward_event_to_plugins(ev);
         }
     }
 }

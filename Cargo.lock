@@ -1281,10 +1281,12 @@ dependencies = [
  "anyhow",
  "crossterm",
  "ratatui",
+ "serde_json",
  "spud-agent",
  "spud-core",
  "spud-mod-hello",
  "spud-mod-stats",
+ "spud-remote",
  "spud-ui",
  "tracing",
 ]

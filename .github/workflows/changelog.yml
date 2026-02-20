@@ -1,0 +1,45 @@
+name: Changelog
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: changelog-main
+  cancel-in-progress: false
+
+jobs:
+  update-changelog:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Update changelog
+      env:
+        BEFORE_SHA: ${{ github.event.before }}
+        AFTER_SHA: ${{ github.sha }}
+        REPO: ${{ github.repository }}
+      run: ./scripts/update-changelog.sh
+
+    - name: Create changelog PR
+      uses: peter-evans/create-pull-request@v8
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        branch: automation/changelog
+        delete-branch: true
+        commit-message: "chore(changelog): update changelog [skip changelog]"
+        title: "chore(changelog): update changelog"
+        body: |
+          Automated changelog update from latest commits on `main`.
+        labels: |
+          type:infra
+        assignees: tjhanley

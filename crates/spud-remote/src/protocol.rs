@@ -29,6 +29,10 @@ pub const REQUIRED_METHODS: [&str; 6] = [
 
 /// Host JSON-RPC error codes.
 pub mod error_code {
+    /// JSON-RPC standard invalid request error.
+    pub const INVALID_REQUEST: i32 = -32600;
+    /// JSON-RPC standard method not found error.
+    pub const METHOD_NOT_FOUND: i32 = -32601;
     /// JSON-RPC standard invalid params error.
     pub const INVALID_PARAMS: i32 = -32602;
     /// API version is unsupported by the host.
