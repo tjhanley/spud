@@ -35,6 +35,8 @@ cargo run -p spud-app
 ### Plugin Runtime
 - `SPUD_PLUGIN_DIRS`: optional path-list of plugin roots (uses your OS path separator).
 - Each plugin root is scanned recursively for `plugin.toml`.
+- `spud-remote` intentionally exposes typed `RuntimeError` at the runtime boundary.
+- Host pump-loop control flow is explicit: `Timeout`/`NotRunning` are non-fatal, and `ProcessExited` means detach session.
 
 Example:
 ```bash

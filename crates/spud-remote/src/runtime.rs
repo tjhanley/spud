@@ -59,6 +59,10 @@ pub struct HandledRequest {
 }
 
 /// Runtime manager failures.
+///
+/// `RuntimeError` is intentionally typed at the runtime boundary so host callers
+/// can make deterministic control-flow decisions (for example, pump-loop
+/// handling of timeout/not-running/process-exit cases) without string matching.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RuntimeError {
     Discovery(String),
@@ -103,6 +107,18 @@ impl std::fmt::Display for RuntimeError {
 }
 
 impl std::error::Error for RuntimeError {}
+
+impl RuntimeError {
+    /// Returns true when a host pump loop should ignore this error and continue.
+    pub fn is_nonfatal_for_pump(&self) -> bool {
+        matches!(self, Self::Timeout { .. } | Self::NotRunning(_))
+    }
+
+    /// Returns true when this error indicates the plugin process has exited.
+    pub fn is_process_exit(&self) -> bool {
+        matches!(self, Self::ProcessExited { .. })
+    }
+}
 
 /// Discover plugin manifests from one or more search roots.
 ///
@@ -1310,6 +1326,31 @@ echo "$line" >> "$TRANSCRIPT"
         );
 
         runtime.shutdown_all();
+    }
+
+    #[test]
+    fn runtime_error_pump_classification_is_stable() {
+        let timeout = RuntimeError::Timeout {
+            plugin_id: "spud.timeout".to_string(),
+            timeout_ms: 1,
+        };
+        assert!(timeout.is_nonfatal_for_pump());
+        assert!(!timeout.is_process_exit());
+
+        let not_running = RuntimeError::NotRunning("spud.none".to_string());
+        assert!(not_running.is_nonfatal_for_pump());
+        assert!(!not_running.is_process_exit());
+
+        let exited = RuntimeError::ProcessExited {
+            plugin_id: "spud.exit".to_string(),
+            code: Some(17),
+        };
+        assert!(!exited.is_nonfatal_for_pump());
+        assert!(exited.is_process_exit());
+
+        let protocol = RuntimeError::Protocol("bad payload".to_string());
+        assert!(!protocol.is_nonfatal_for_pump());
+        assert!(!protocol.is_process_exit());
     }
 
     #[cfg(unix)]

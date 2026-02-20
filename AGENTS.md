@@ -22,7 +22,8 @@ If `assets/` or `scripts/` are absent in the current branch, treat this as optio
 ## Coding Style & Naming Conventions
 - Rust 2021 edition, formatted with `rustfmt` (default 4-space indentation).
 - Keep public APIs documented with `///` doc comments.
-- Prefer `anyhow::Result<T>` and `anyhow::bail!()` for error flow.
+- Prefer `anyhow::Result<T>` and `anyhow::bail!()` for internal error flow.
+- Use typed errors for public control-flow contracts when callers must branch on variants (for example `spud-remote::runtime::RuntimeError`).
 - Keep crate names consistent: `spud-{component}` and `spud-mod-{name}`.
 - Keep the codebase synchronous (no async runtime patterns).
 

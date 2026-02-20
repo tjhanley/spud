@@ -30,7 +30,7 @@ use spud_remote::{
         ActiveModule, EventCategory, InvokeCommandParams, InvokeCommandResult, PublishEventParams,
         PublishEventResult, StateSnapshot,
     },
-    runtime::{HostBridge, PluginRuntime, RuntimeError},
+    runtime::{HostBridge, PluginRuntime},
 };
 use spud_ui::{
     console::render_console,
@@ -288,8 +288,8 @@ impl App {
                         "handled plugin request"
                     );
                 }
-                Err(RuntimeError::Timeout { .. } | RuntimeError::NotRunning(_)) => {}
-                Err(RuntimeError::ProcessExited { .. }) => {
+                Err(err) if err.is_nonfatal_for_pump() => {}
+                Err(err) if err.is_process_exit() => {
                     tracing::warn!(
                         plugin_id = %plugin_id,
                         "plugin process exited; runtime session detached"

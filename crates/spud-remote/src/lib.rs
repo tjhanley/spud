@@ -2,6 +2,9 @@
 //!
 //! This crate defines the versioned JSON-RPC host API contract and strongly
 //! typed payloads shared by plugin-runtime implementation work.
+//!
+//! Runtime manager operations intentionally return a typed `RuntimeError` to
+//! preserve deterministic caller control-flow in host pump loops.
 
 pub mod permissions;
 pub mod protocol;
