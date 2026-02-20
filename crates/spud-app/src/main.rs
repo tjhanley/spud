@@ -264,9 +264,18 @@ impl App {
             tick_counter: &self.tick_counter,
             commands: &self.commands,
         };
+        let pump_started_at = Instant::now();
 
         for plugin_id in plugin_ids {
-            match runtime.pump_next(&plugin_id, &mut host, timeout) {
+            if pump_started_at.elapsed() >= timeout {
+                tracing::debug!(
+                    budget_ms = timeout.as_millis(),
+                    "plugin pump budget exhausted for this frame"
+                );
+                break;
+            }
+
+            match runtime.pump_next(&plugin_id, &mut host, Duration::ZERO) {
                 Ok(handled) => {
                     tracing::debug!(
                         plugin_id = %handled.plugin_id,
@@ -328,7 +337,8 @@ impl HostBridge for AppHost<'_> {
         });
 
         let uptime_seconds = Instant::now()
-            .duration_since(self.state.started_at)
+            .checked_duration_since(self.state.started_at)
+            .unwrap_or(Duration::ZERO)
             .as_secs();
 
         Ok(StateSnapshot {
@@ -397,7 +407,10 @@ fn map_event_for_plugins(
             EventCategory::Tick,
             None,
             json!({
-                "uptime_seconds": now.duration_since(started_at).as_secs_f64()
+                "uptime_seconds": now
+                    .checked_duration_since(started_at)
+                    .unwrap_or(Duration::ZERO)
+                    .as_secs_f64()
             }),
         )),
         Event::Resize { cols, rows } => Some((

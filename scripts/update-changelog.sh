@@ -48,21 +48,26 @@ trap cleanup EXIT
 
 while IFS=$'\t' read -r commit_sha subject; do
   [[ -z "${commit_sha}" ]] && continue
+  short_sha="${commit_sha:0:7}"
+  entry_marker="<!-- sha:${commit_sha} -->"
 
   if [[ "${subject}" == chore\(changelog\):* ]]; then
     continue
   fi
 
-  if grep -Fq "${commit_sha}" "${CHANGELOG_FILE}"; then
+  if grep -Fq "${entry_marker}" "${CHANGELOG_FILE}" || grep -Fq "${commit_sha}" "${CHANGELOG_FILE}"; then
     continue
   fi
 
-  short_sha="${commit_sha:0:7}"
+  if [[ -z "${REPO}" ]] && grep -Fq "\`${short_sha}\`" "${CHANGELOG_FILE}"; then
+    continue
+  fi
+
   if [[ -n "${REPO}" ]]; then
-    printf -- '- %s ([`%s`](https://github.com/%s/commit/%s))\n' \
-      "${subject}" "${short_sha}" "${REPO}" "${commit_sha}" >> "${TMP_ENTRIES}"
+    printf -- '- %s ([`%s`](https://github.com/%s/commit/%s)) %s\n' \
+      "${subject}" "${short_sha}" "${REPO}" "${commit_sha}" "${entry_marker}" >> "${TMP_ENTRIES}"
   else
-    printf -- '- %s (`%s`)\n' "${subject}" "${short_sha}" >> "${TMP_ENTRIES}"
+    printf -- '- %s (`%s`) %s\n' "${subject}" "${short_sha}" "${entry_marker}" >> "${TMP_ENTRIES}"
   fi
 done < <(git log --reverse --pretty=format:'%H%x09%s' "${RANGE}")
 

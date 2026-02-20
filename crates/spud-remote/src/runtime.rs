@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
@@ -28,6 +28,7 @@ const UNSUBSCRIBE_METHOD: &str = "spud.events.unsubscribe";
 const INVOKE_COMMAND_METHOD: &str = "spud.host.invoke_command";
 const PUBLISH_EVENT_METHOD: &str = "spud.host.publish_event";
 const EVENT_NOTIFICATION_METHOD: &str = "spud.events.emit";
+const MAX_JSONRPC_LINE_BYTES: usize = 1024 * 1024;
 
 /// A plugin manifest discovered on disk.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -903,31 +904,66 @@ enum ReaderEvent {
 fn spawn_reader(stdout: ChildStdout) -> Receiver<ReaderEvent> {
     let (tx, rx) = mpsc::channel();
     thread::spawn(move || {
-        let reader = BufReader::new(stdout);
-        for line in reader.lines() {
-            match line {
-                Ok(line) => {
-                    if line.trim().is_empty() {
-                        continue;
-                    }
-
-                    let parsed = serde_json::from_str::<JsonRpcRequestEnvelope>(&line)
-                        .map_err(|err| format!("invalid JSON-RPC request ({err}): {line}"));
-
-                    match parsed {
-                        Ok(request) => {
-                            if tx.send(ReaderEvent::Request(request)).is_err() {
-                                return;
-                            }
-                        }
-                        Err(message) => {
-                            let _ = tx.send(ReaderEvent::ProtocolError(message));
-                            return;
-                        }
+        let mut reader = BufReader::new(stdout);
+        loop {
+            let mut line = Vec::new();
+            let bytes_read = {
+                let mut limited = reader.by_ref().take((MAX_JSONRPC_LINE_BYTES + 1) as u64);
+                match limited.read_until(b'\n', &mut line) {
+                    Ok(bytes_read) => bytes_read,
+                    Err(err) => {
+                        let _ = tx.send(ReaderEvent::IoError(err.to_string()));
+                        return;
                     }
                 }
+            };
+
+            if bytes_read == 0 {
+                break;
+            }
+
+            let terminated = line.last() == Some(&b'\n');
+            let content_len = if terminated {
+                line.len().saturating_sub(1)
+            } else {
+                line.len()
+            };
+            if content_len > MAX_JSONRPC_LINE_BYTES {
+                let _ = tx.send(ReaderEvent::ProtocolError(format!(
+                    "JSON-RPC frame exceeds max line size of {MAX_JSONRPC_LINE_BYTES} bytes"
+                )));
+                return;
+            }
+
+            while matches!(line.last(), Some(b'\n' | b'\r')) {
+                line.pop();
+            }
+
+            if line.iter().all(|byte| byte.is_ascii_whitespace()) {
+                continue;
+            }
+
+            let line = match String::from_utf8(line) {
+                Ok(line) => line,
                 Err(err) => {
-                    let _ = tx.send(ReaderEvent::IoError(err.to_string()));
+                    let _ = tx.send(ReaderEvent::ProtocolError(format!(
+                        "invalid UTF-8 in JSON-RPC request: {err}"
+                    )));
+                    return;
+                }
+            };
+
+            let parsed = serde_json::from_str::<JsonRpcRequestEnvelope>(&line)
+                .map_err(|err| format!("invalid JSON-RPC request ({err}): {line}"));
+
+            match parsed {
+                Ok(request) => {
+                    if tx.send(ReaderEvent::Request(request)).is_err() {
+                        return;
+                    }
+                }
+                Err(message) => {
+                    let _ = tx.send(ReaderEvent::ProtocolError(message));
                     return;
                 }
             }
@@ -979,20 +1015,42 @@ fn collect_manifest_paths(root: &Path, paths: &mut Vec<PathBuf>) -> Result<()> {
         return Ok(());
     }
 
-    let mut stack = vec![root.to_path_buf()];
+    let mut visited_dirs = BTreeSet::new();
+    let mut stack = Vec::new();
+    if let Ok(canonical_root) = fs::canonicalize(root) {
+        visited_dirs.insert(canonical_root.clone());
+        stack.push(canonical_root);
+    } else {
+        stack.push(root.to_path_buf());
+    }
+
     while let Some(path) = stack.pop() {
         for entry in fs::read_dir(&path)
             .with_context(|| format!("failed to read directory {}", path.display()))?
         {
             let entry = entry
                 .with_context(|| format!("failed to read directory entry in {}", path.display()))?;
+            let file_type = entry
+                .file_type()
+                .with_context(|| format!("failed to read entry file type in {}", path.display()))?;
             let child = entry.path();
-            if child.is_dir() {
-                stack.push(child);
+            if file_type.is_symlink() {
                 continue;
             }
 
-            if child.file_name().and_then(|name| name.to_str()) == Some("plugin.toml") {
+            if file_type.is_dir() {
+                let Ok(canonical_child) = fs::canonicalize(&child) else {
+                    continue;
+                };
+                if visited_dirs.insert(canonical_child.clone()) {
+                    stack.push(canonical_child);
+                }
+                continue;
+            }
+
+            if file_type.is_file()
+                && child.file_name().and_then(|name| name.to_str()) == Some("plugin.toml")
+            {
                 paths.push(child);
             }
         }
@@ -1158,6 +1216,21 @@ subscriptions = {subscriptions}
 
         let err = discover_plugins(std::slice::from_ref(&root.path)).unwrap_err();
         assert!(err.to_string().contains("duplicate plugin id"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn discover_plugins_skips_symlink_cycles() {
+        let root = TestDir::new("symlink-cycle");
+        let plugin_dir = root.path.join("plugin");
+        fs::create_dir_all(&plugin_dir).unwrap();
+
+        write_plugin_manifest(&plugin_dir, "spud.symlink", "plugin.sh", &[], &[], &[]);
+        std::os::unix::fs::symlink(&root.path, plugin_dir.join("loop")).unwrap();
+
+        let discovered = discover_plugins(std::slice::from_ref(&root.path)).unwrap();
+        assert_eq!(discovered.len(), 1);
+        assert_eq!(discovered[0].manifest.id, "spud.symlink");
     }
 
     #[cfg(unix)]
