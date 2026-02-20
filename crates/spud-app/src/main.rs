@@ -267,7 +267,11 @@ impl App {
         let pump_started_at = Instant::now();
 
         for plugin_id in plugin_ids {
-            if pump_started_at.elapsed() >= timeout {
+            if Instant::now()
+                .checked_duration_since(pump_started_at)
+                .unwrap_or(Duration::ZERO)
+                >= timeout
+            {
                 tracing::debug!(
                     budget_ms = timeout.as_millis(),
                     "plugin pump budget exhausted for this frame"

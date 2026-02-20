@@ -29,6 +29,7 @@ const INVOKE_COMMAND_METHOD: &str = "spud.host.invoke_command";
 const PUBLISH_EVENT_METHOD: &str = "spud.host.publish_event";
 const EVENT_NOTIFICATION_METHOD: &str = "spud.events.emit";
 const MAX_JSONRPC_LINE_BYTES: usize = 1024 * 1024;
+const PARSE_ERROR_PREVIEW_CHARS: usize = 256;
 
 /// A plugin manifest discovered on disk.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -501,7 +502,7 @@ impl PluginSession {
     ) -> std::result::Result<HandledRequest, RuntimeError> {
         if request.jsonrpc != JSONRPC_VERSION {
             let error = JsonRpcError {
-                code: error_code::INVALID_PARAMS,
+                code: error_code::INVALID_REQUEST,
                 message: format!("unsupported jsonrpc version: {}", request.jsonrpc),
                 data: None,
             };
@@ -663,7 +664,7 @@ impl PluginSession {
             },
             _ => {
                 let error = JsonRpcError {
-                    code: error_code::INVALID_PARAMS,
+                    code: error_code::METHOD_NOT_FOUND,
                     message: format!("unsupported method: {}", request.method),
                     data: None,
                 };
@@ -953,8 +954,12 @@ fn spawn_reader(stdout: ChildStdout) -> Receiver<ReaderEvent> {
                 }
             };
 
-            let parsed = serde_json::from_str::<JsonRpcRequestEnvelope>(&line)
-                .map_err(|err| format!("invalid JSON-RPC request ({err}): {line}"));
+            let parsed = serde_json::from_str::<JsonRpcRequestEnvelope>(&line).map_err(|err| {
+                format!(
+                    "invalid JSON-RPC request ({err}): {}",
+                    truncated_line_preview(&line)
+                )
+            });
 
             match parsed {
                 Ok(request) => {
@@ -982,6 +987,16 @@ fn parse_params<T: DeserializeOwned>(
         message: format!("invalid params for {}: {err}", request.method),
         data: None,
     })
+}
+
+fn truncated_line_preview(line: &str) -> String {
+    let mut chars = line.chars();
+    let preview: String = chars.by_ref().take(PARSE_ERROR_PREVIEW_CHARS).collect();
+    if chars.next().is_some() {
+        format!("{preview}... (truncated, {} bytes)", line.len())
+    } else {
+        preview
+    }
 }
 
 fn host_unavailable_error(err: anyhow::Error) -> JsonRpcError {
@@ -1216,6 +1231,85 @@ subscriptions = {subscriptions}
 
         let err = discover_plugins(std::slice::from_ref(&root.path)).unwrap_err();
         assert!(err.to_string().contains("duplicate plugin id"));
+    }
+
+    #[test]
+    fn truncated_line_preview_limits_output() {
+        let long_line = "x".repeat(300);
+        let preview = truncated_line_preview(&long_line);
+        assert!(preview.starts_with(&"x".repeat(PARSE_ERROR_PREVIEW_CHARS)));
+        assert!(preview.contains("truncated"));
+        assert!(preview.contains("300 bytes"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn runtime_uses_standard_jsonrpc_error_codes() {
+        let root = TestDir::new("jsonrpc-errors");
+        let plugin_dir = root.path.join("plugin");
+        fs::create_dir_all(&plugin_dir).unwrap();
+
+        let transcript = plugin_dir.join("transcript.log");
+        let script = r#"#!/bin/sh
+set -eu
+TRANSCRIPT="__TRANSCRIPT__"
+
+echo '{"jsonrpc":"2.0","id":1,"method":"spud.handshake","params":{"plugin_id":"spud.errors","plugin_version":"0.1.0","supported_api_versions":"^1.0.0","requested_capabilities":[]}}'
+IFS= read -r line
+echo "$line" >> "$TRANSCRIPT"
+
+echo '{"jsonrpc":"1.0","id":2,"method":"spud.state.get_snapshot","params":{}}'
+IFS= read -r line
+echo "$line" >> "$TRANSCRIPT"
+
+echo '{"jsonrpc":"2.0","id":3,"method":"spud.host.not_real","params":{}}'
+IFS= read -r line
+echo "$line" >> "$TRANSCRIPT"
+"#
+        .replace("__TRANSCRIPT__", &transcript.to_string_lossy());
+
+        fs::write(plugin_dir.join("plugin.sh"), script).unwrap();
+        write_plugin_manifest(
+            &plugin_dir,
+            "spud.errors",
+            "plugin.sh",
+            &["help"],
+            &["plugin.metrics"],
+            &["tick"],
+        );
+
+        let mut runtime =
+            PluginRuntime::from_search_roots(std::slice::from_ref(&root.path)).unwrap();
+        runtime
+            .start("spud.errors", Duration::from_secs(2))
+            .unwrap();
+
+        let mut host = MockHost::default();
+        let invalid_jsonrpc = runtime
+            .pump_next("spud.errors", &mut host, Duration::from_secs(2))
+            .unwrap();
+        assert_eq!(invalid_jsonrpc.method, GET_SNAPSHOT_METHOD);
+        assert!(invalid_jsonrpc.responded_with_error);
+
+        let unknown_method = runtime
+            .pump_next("spud.errors", &mut host, Duration::from_secs(2))
+            .unwrap();
+        assert_eq!(unknown_method.method, "spud.host.not_real");
+        assert!(unknown_method.responded_with_error);
+
+        let lines = wait_for_transcript(&transcript, 3);
+        let invalid_jsonrpc_response: Value = serde_json::from_str(&lines[1]).unwrap();
+        let method_not_found_response: Value = serde_json::from_str(&lines[2]).unwrap();
+        assert_eq!(
+            invalid_jsonrpc_response["error"]["code"],
+            error_code::INVALID_REQUEST
+        );
+        assert_eq!(
+            method_not_found_response["error"]["code"],
+            error_code::METHOD_NOT_FOUND
+        );
+
+        runtime.shutdown_all();
     }
 
     #[cfg(unix)]

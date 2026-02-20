@@ -80,11 +80,20 @@ today="$(date -u +%Y-%m-%d)"
 today_header="### ${today}"
 inside_section=0
 inserted=0
+has_today_header=0
+if grep -Fxq "${today_header}" "${CHANGELOG_FILE}"; then
+  has_today_header=1
+fi
 
 while IFS= read -r line || [[ -n "${line}" ]]; do
   if [[ "${line}" == "<!-- changelog:start -->" ]]; then
     printf '%s\n' "${line}" >> "${TMP_OUTPUT}"
     inside_section=1
+    if [[ ${inserted} -eq 0 && ${has_today_header} -eq 0 ]]; then
+      printf '\n%s\n' "${today_header}" >> "${TMP_OUTPUT}"
+      cat "${TMP_ENTRIES}" >> "${TMP_OUTPUT}"
+      inserted=1
+    fi
     continue
   fi
 
@@ -96,10 +105,6 @@ while IFS= read -r line || [[ -n "${line}" ]]; do
   fi
 
   if [[ ${inside_section} -eq 1 && "${line}" == "<!-- changelog:end -->" ]]; then
-    if [[ ${inserted} -eq 0 ]]; then
-      printf '\n%s\n' "${today_header}" >> "${TMP_OUTPUT}"
-      cat "${TMP_ENTRIES}" >> "${TMP_OUTPUT}"
-    fi
     printf '%s\n' "${line}" >> "${TMP_OUTPUT}"
     inside_section=0
     continue
