@@ -1,11 +1,12 @@
 use ratatui::{
-    layout::Rect,
+    layout::{Alignment, Rect},
     style::Style,
     text::{Line, Text},
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
 
+use crate::face::build_face_text;
 use crate::layout::DoomRects;
 
 /// Data passed to [`render_shell`] to populate the shell chrome.
@@ -23,8 +24,8 @@ pub struct ShellView<'a> {
     pub hud_right: Vec<String>,
     /// Optional text lines rendered in the HUD centre panel.
     ///
-    /// This is a temporary text-only payload while the new ASCII animation
-    /// pipeline is implemented.
+    /// Plain lines render as text, while palette-encoded lines render as a
+    /// pixel sprite.
     pub hud_face_lines: Vec<String>,
 }
 
@@ -68,13 +69,10 @@ pub fn render_shell(
         Paragraph::new(Line::from("[ FACE ]"))
             .block(Block::default().borders(Borders::ALL).title("AGENT"))
     } else {
-        let face_text = Text::from(
-            view.hud_face_lines
-                .into_iter()
-                .map(Line::from)
-                .collect::<Vec<_>>(),
-        );
-        Paragraph::new(face_text).block(Block::default().borders(Borders::ALL).title("AGENT"))
+        let face_text = build_face_text(&view.hud_face_lines);
+        Paragraph::new(face_text)
+            .alignment(Alignment::Center)
+            .block(Block::default().borders(Borders::ALL).title("AGENT"))
     };
     f.render_widget(face, rects.hud_face);
 
